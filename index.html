@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>RTDB — Simple Leaflet Map</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    body{margin:0;font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial}
+    #map{height:100vh}
+    .legend{background:#fff;padding:8px;border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,.15)}
+    .marker-online{background:#16a34a;border-radius:50%;width:12px;height:12px;display:inline-block;margin-right:6px}
+    .marker-offline{background:#ef4444;border-radius:50%;width:12px;height:12px;display:inline-block;margin-right:6px}
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <script>
+    // URL RTDB Firebase
+    const DATA_URL = 'https://wifi-maps-fed29-default-rtdb.asia-southeast1.firebasedatabase.app/pppoe.json';
+
+    // Inisialisasi peta
+    const map = L.map('map').setView([-7.14, 110.95], 14);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '© OpenStreetMap'
+    }).addTo(map);
+
+    const onlineIcon = L.divIcon({className: '', html: '<span class="marker-online"></span>' , iconSize:[14,14]});
+    const offlineIcon = L.divIcon({className: '', html: '<span class="marker-offline"></span>' , iconSize:[14,14]});
+
+    const markers = L.layerGroup().addTo(map);
+
+    function buildPopup(item){
+      const lat = parseFloat(item.latitude);
+      const lon = parseFloat(item.longitude);
+      const gmLink = `https://www.google.com/maps?q=${lat},${lon}`;
+      const waLink = item.whatsapp ? `https://wa.me/${item.whatsapp.replace(/[^0-9]/g,'')}` : '#';
+      return `
+        <div style="min-width:180px">
+          <strong>${item.fullname}</strong><br/>
+          <small>${item.user}</small><br/>
+          <small>ip address : <a href="http://${item.address}">${item.address}</a></small><br/>
+          <small>Profile : ${item.profile}</a></small><br/>
+          <small>Service : ${item.service}</a></small><br/>
+          <small>Radius : ${item.radius}</a></small><br/>
+          <small>nas : ${item.nas}</a></small><br/>
+          <small>uptime : ${item.uptime}</a></small><br/>
+          Aktif: ${item.activedate}<br/>
+          Status: ${item.status==1 ? '<span style="color:green">Online</span>' : '<span style="color:red">Offline</span>'}<br/>
+          <a href="${gmLink}" target="_blank">Buka di Maps</a> • <a href="${waLink}" target="_blank">WhatsApp</a>
+        </div>
+      `;
+    }
+
+    function addMarkersFromObject(obj){
+      markers.clearLayers();
+      const coords = [];
+      Object.entries(obj).forEach(([key, value]) => {
+        if (value.suspend === 'suspend') return;
+        if (!value.latitude || !value.longitude) return;
+        const lat = parseFloat(value.latitude);
+        const lon = parseFloat(value.longitude);
+        if (Number.isNaN(lat) || Number.isNaN(lon)) return;
+        coords.push([lat,lon]);
+        const icon = (value.online==1 || value.status==1) ? onlineIcon : offlineIcon;
+        const m = L.marker([lat,lon], {icon}).bindPopup(buildPopup(value));
+        markers.addLayer(m);
+      });
+
+      if (coords.length) {
+        const bounds = L.latLngBounds(coords);
+        map.fitBounds(bounds.pad(0.25));
+      }
+    }
+
+    // Ambil data dari Firebase RTDB
+    fetch(DATA_URL, {cache:'no-store'})
+      .then(r => {
+        if (!r.ok) throw new Error('HTTP '+r.status);
+        return r.json();
+      })
+      .then(data => {
+        if (typeof data === 'object' && !Array.isArray(data)) {
+          addMarkersFromObject(data);
+        } else {
+          console.warn('Format data tidak terduga');
+        }
+      })
+      .catch(err => {
+        console.error('Gagal mengambil data RTDB:', err);
+      });
+
+    const legend = L.control({position:'topright'});
+    legend.onAdd = function(){
+      const div = L.DomUtil.create('div','legend');
+      div.innerHTML = `
+        <div style="font-weight:600;margin-bottom:6px">RTDB — Legend</div>
+        <div><span class="marker-online"></span> Online</div>
+        <div><span class="marker-offline"></span> Offline</div>
+      `;
+      return div;
+    }
+    legend.addTo(map);
+  </script>
+</body>
+</html>
