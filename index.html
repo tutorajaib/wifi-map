@@ -76,17 +76,22 @@
     const gmLink = `https://www.google.com/maps?q=${lat},${lon}`;
     const waLink = item.whatsapp ? `https://wa.me/${item.whatsapp.replace(/[^0-9]/g,'')}` : '#';
     return `
-      <div style="min-width:200px">
-        <strong>${item.fullname||''}</strong><br/>
-        <small>${item.user||''}</small><br/>
-        <small>IP: <a href="http://${item.address||''}" target="_blank" rel="noopener">${item.address||''}</a></small><br/>
-        <small>Profile: ${item.profile||''}</small><br/>
-        <small>Service: ${item.service||''}</small><br/>
-        <small>NAS: ${item.nas||''}</small><br/>
-        <small>Uptime: ${item.uptime||''}</small><br/>
-        Status: ${item.status==1?'<span style="color:green">Online</span>':'<span style="color:red">Offline</span>'}<br/>
-        <a href="${gmLink}" target="_blank" rel="noopener">Buka di Maps</a> • <a href="${waLink}" target="_blank" rel="noopener">WhatsApp</a>
-      </div>
+        <div style="min-width:180px">
+          <strong>${item.fullname}</strong><br/>
+          <small>${item.user}</small><br/>
+          <small>ip address : <a href="http://${item.address}">${item.address}</a></small><br/>
+          <small>Profile : ${item.profile}</a></small><br/>
+          <small>Service : ${item.service}</a></small><br/>
+          <small>Radius : ${item.radius}</a></small><br/>
+          <small>nas : ${item.nas}</a></small><br/>
+          <small>ACS : ${item.ACS}</a></small><br/>
+          <small>Modem : ${item.modem}</a></small><br/>
+          <small>RxPower : ${item.rxpower}</a></small><br/>
+          <small>uptime : ${item.uptime}</a></small><br/>
+          Aktif: ${item.activedate}<br/>
+          Status: ${item.status==1 ? '<span style="color:green">Online</span>' : '<span style="color:red">Offline</span>'}<br/>
+          <a href="${gmLink}" target="_blank">Buka di Maps</a> • <a href="${waLink}" target="_blank">WhatsApp</a>
+        </div>
     `;
   }
 
