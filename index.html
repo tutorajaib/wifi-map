@@ -3,112 +3,173 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>RTDB — Simple Leaflet Map</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
+  <title>PPPoE Live Monitor — Map Realtime</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <style>
     body{margin:0;font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial}
     #map{height:100vh}
     .legend{background:#fff;padding:8px;border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,.15)}
     .marker-online{background:#16a34a;border-radius:50%;width:12px;height:12px;display:inline-block;margin-right:6px}
     .marker-offline{background:#ef4444;border-radius:50%;width:12px;height:12px;display:inline-block;margin-right:6px}
+    .top-controls{position:absolute;left:8px;top:8px;z-index:1000;display:flex;gap:8px}
+    .top-controls select, .top-controls button{padding:6px;border-radius:6px;border:1px solid #ddd;background:#fff}
+    .notif-bar{position:absolute;right:8px;top:8px;z-index:1000;background:rgba(255,255,255,0.95);padding:8px;border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,.12)}
   </style>
 </head>
 <body>
+  <div class="top-controls">
+    <select id="basemapSelect" aria-label="Pilih tipe peta">
+      <option value="osm">OpenStreetMap</option>
+      <option value="sat">Esri Satellite</option>
+      <option value="topo">OpenTopoMap</option>
+      <option value="stamen">Stamen Toner</option>
+    </select>
+    <button id="fitAll">Fit Semua Marker</button>
+  </div>
+  <div class="notif-bar" id="notifBar">Ready</div>
   <div id="map"></div>
 
-  <script>
-    // URL RTDB Firebase
-    const DATA_URL = 'https://wifi-maps-fed29-default-rtdb.asia-southeast1.firebasedatabase.app/pppoe.json';
+  <audio id="notifSound" src="https://www.myinstants.com/media/sounds/notification.mp3" preload="auto"></audio>
 
-    // Inisialisasi peta
-    const map = L.map('map').setView([-7.14, 110.95], 14);
+<script>
+  // Ubah sesuai RTDB Anda
+  const firebaseConfig = { databaseURL: "https://wifi-maps-fed29-default-rtdb.asia-southeast1.firebasedatabase.app/" };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+  const ref = db.ref('pppoe');
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '© OpenStreetMap'
-    }).addTo(map);
+  // Tile providers
+  const baseOSM = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'});
+  const baseEsriSat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'© Esri'});
+  const baseTopo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxZoom:17,attribution:'© OpenTopoMap'});
+  const baseStamen = L.tileLayer('https://stamen-tiles.a.ssl.fastly.net/toner/{z}/{x}/{y}.png',{maxZoom:20,attribution:'Stamen'});
 
-    const onlineIcon = L.divIcon({className: '', html: '<span class="marker-online"></span>' , iconSize:[14,14]});
-    const offlineIcon = L.divIcon({className: '', html: '<span class="marker-offline"></span>' , iconSize:[14,14]});
+  const map = L.map('map',{layers:[baseOSM]}).setView([-7.14,110.95],14);
+  const baseMaps = {'OpenStreetMap':baseOSM,'Esri Satellite':baseEsriSat,'OpenTopoMap':baseTopo,'Stamen Toner':baseStamen};
+  L.control.layers(baseMaps,null,{collapsed:true}).addTo(map);
 
-    const markers = L.layerGroup().addTo(map);
+  document.getElementById('basemapSelect').addEventListener('change',e=>{
+    const v = e.target.value;
+    Object.values(baseMaps).forEach(l=>map.removeLayer(l));
+    if(v==='osm') map.addLayer(baseOSM);
+    else if(v==='sat') map.addLayer(baseEsriSat);
+    else if(v==='topo') map.addLayer(baseTopo);
+    else if(v==='stamen') map.addLayer(baseStamen);
+  });
 
-    function buildPopup(item){
-      const lat = parseFloat(item.latitude);
-      const lon = parseFloat(item.longitude);
-      const gmLink = `https://www.google.com/maps?q=${lat},${lon}`;
-      const waLink = item.whatsapp ? `https://wa.me/${item.whatsapp.replace(/[^0-9]/g,'')}` : '#';
-      return `
-        <div style="min-width:180px">
-          <strong>${item.fullname}</strong><br/>
-          <small>${item.user}</small><br/>
-          <small>ip address : <a href="http://${item.address}">${item.address}</a></small><br/>
-          <small>Profile : ${item.profile}</a></small><br/>
-          <small>Service : ${item.service}</a></small><br/>
-          <small>Radius : ${item.radius}</a></small><br/>
-          <small>nas : ${item.nas}</a></small><br/>
-          <small>ACS : ${item.ACS}</a></small><br/>
-          <small>Modem : ${item.modem}</a></small><br/>
-          <small>RxPower : ${item.rxpower}</a></small><br/>
-          <small>uptime : ${item.uptime}</a></small><br/>
-          Aktif: ${item.activedate}<br/>
-          Status: ${item.status==1 ? '<span style="color:green">Online</span>' : '<span style="color:red">Offline</span>'}<br/>
-          <a href="${gmLink}" target="_blank">Buka di Maps</a> • <a href="${waLink}" target="_blank">WhatsApp</a>
-        </div>
-      `;
+  // Marker handling
+  const onlineIcon = L.divIcon({className:'',html:'<span class="marker-online"></span>',iconSize:[14,14]});
+  const offlineIcon = L.divIcon({className:'',html:'<span class="marker-offline"></span>',iconSize:[14,14]});
+  const markers = {};
+  const markerGroup = L.layerGroup().addTo(map);
+
+  const notifAudio = document.getElementById('notifSound');
+  const notifBar = document.getElementById('notifBar');
+  let lastStatus = {};
+
+  function buildPopup(item){
+    const lat = parseFloat(item.latitude||0);
+    const lon = parseFloat(item.longitude||0);
+    const gmLink = `https://www.google.com/maps?q=${lat},${lon}`;
+    const waLink = item.whatsapp ? `https://wa.me/${item.whatsapp.replace(/[^0-9]/g,'')}` : '#';
+    return `
+      <div style="min-width:200px">
+        <strong>${item.fullname||''}</strong><br/>
+        <small>${item.user||''}</small><br/>
+        <small>IP: <a href="http://${item.address||''}" target="_blank" rel="noopener">${item.address||''}</a></small><br/>
+        <small>Profile: ${item.profile||''}</small><br/>
+        <small>Service: ${item.service||''}</small><br/>
+        <small>NAS: ${item.nas||''}</small><br/>
+        <small>Uptime: ${item.uptime||''}</small><br/>
+        Status: ${item.status==1?'<span style="color:green">Online</span>':'<span style="color:red">Offline</span>'}<br/>
+        <a href="${gmLink}" target="_blank" rel="noopener">Buka di Maps</a> • <a href="${waLink}" target="_blank" rel="noopener">WhatsApp</a>
+      </div>
+    `;
+  }
+
+  function addOrUpdateMarker(key, data){
+    if(!data || data.suspend==='suspend') return;
+    if(!data.latitude || !data.longitude) return;
+    const lat = parseFloat(data.latitude);
+    const lng = parseFloat(data.longitude);
+    if(Number.isNaN(lat)||Number.isNaN(lng)) return;
+
+    const icon = (data.online==1 || data.status==1) ? onlineIcon : offlineIcon;
+
+    if(markers[key]){
+      // update position & popup
+      markers[key].setLatLng([lat,lng]);
+      markers[key].setIcon(icon);
+      markers[key].setPopupContent(buildPopup(data));
+    } else {
+      const m = L.marker([lat,lng],{icon}).bindPopup(buildPopup(data));
+      markerGroup.addLayer(m);
+      markers[key] = m;
     }
+  }
 
-    function addMarkersFromObject(obj){
-      markers.clearLayers();
-      const coords = [];
-      Object.entries(obj).forEach(([key, value]) => {
-        if (value.suspend === 'suspend') return;
-        if (!value.latitude || !value.longitude) return;
-        const lat = parseFloat(value.latitude);
-        const lon = parseFloat(value.longitude);
-        if (Number.isNaN(lat) || Number.isNaN(lon)) return;
-        coords.push([lat,lon]);
-        const icon = (value.online==1 || value.status==1) ? onlineIcon : offlineIcon;
-        const m = L.marker([lat,lon], {icon}).bindPopup(buildPopup(value));
-        markers.addLayer(m);
-      });
-
-      if (coords.length) {
-        const bounds = L.latLngBounds(coords);
-        map.fitBounds(bounds.pad(0.25));
-      }
+  function removeMarker(key){
+    if(markers[key]){
+      markerGroup.removeLayer(markers[key]);
+      delete markers[key];
     }
+  }
 
-    // Ambil data dari Firebase RTDB
-    fetch(DATA_URL, {cache:'no-store'})
-      .then(r => {
-        if (!r.ok) throw new Error('HTTP '+r.status);
-        return r.json();
-      })
-      .then(data => {
-        if (typeof data === 'object' && !Array.isArray(data)) {
-          addMarkersFromObject(data);
-        } else {
-          console.warn('Format data tidak terduga');
-        }
-      })
-      .catch(err => {
-        console.error('Gagal mengambil data RTDB:', err);
-      });
+  function notify(text){
+    // tampilkan di UI dan mainkan suara
+    notifBar.textContent = text;
+    //try{ notifAudio.currentTime = 0; notifAudio.play().catch(()=>{}); }catch(e){}
+    // juga bicara singkat
+    try{
+      const u = new SpeechSynthesisUtterance(text); u.lang='id-ID'; u.rate=1; speechSynthesis.speak(u);
+    }catch(e){}
+  }
 
-    const legend = L.control({position:'topright'});
-    legend.onAdd = function(){
-      const div = L.DomUtil.create('div','legend');
-      div.innerHTML = `
-        <div style="font-weight:600;margin-bottom:6px">RTDB — Legend</div>
-        <div><span class="marker-online"></span> Online</div>
-        <div><span class="marker-offline"></span> Offline</div>
-      `;
-      return div;
+  // Realtime listeners
+  ref.on('child_added', snap => {
+    const key = snap.key; const data = snap.val();
+    addOrUpdateMarker(key, data);
+    if(!lastStatus[key]) notify(`Pengguna baru: ${data.user || key}`);
+    lastStatus[key] = data.status;
+  });
+
+  ref.on('child_changed', snap => {
+    const key = snap.key; const data = snap.val();
+    const prev = lastStatus[key];
+    addOrUpdateMarker(key, data);
+    if(prev!==undefined && String(prev) !== String(data.status)){
+      const s = data.status==1 ? 'online' : 'offline';
+      notify(`User ${data.user || key} sekarang ${s}`);
     }
-    legend.addTo(map);
-  </script>
+    lastStatus[key] = data.status;
+  });
+
+  ref.on('child_removed', snap => {
+    const key = snap.key; const data = snap.val();
+    removeMarker(key);
+    notify(`User dihapus: ${data && data.user ? data.user : key}`);
+    delete lastStatus[key];
+  });
+
+  // Fit bounds button
+  document.getElementById('fitAll').addEventListener('click', ()=>{
+    const latlngs = [];
+    Object.values(markers).forEach(m=>latlngs.push(m.getLatLng()));
+    if(latlngs.length) map.fitBounds(L.latLngBounds(latlngs).pad(0.2));
+    else alert('Belum ada marker.');
+  });
+
+  // small safety: fallback ke fetch sekali jika perlu
+  setTimeout(()=>{
+    // jika belum ada marker setelah 2 detik, lakukan fetch sekali
+    if(Object.keys(markers).length===0){
+      fetch(firebaseConfig.databaseURL + 'pppoe.json')
+        .then(r=>r.json()).then(d=>{ if(d) Object.entries(d).forEach(([k,v])=>addOrUpdateMarker(k,v)); });
+    }
+  },2000);
+</script>
 </body>
 </html>
