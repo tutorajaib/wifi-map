@@ -69,7 +69,7 @@
   const notifAudio = document.getElementById('notifSound');
   const notifBar = document.getElementById('notifBar');
   let lastStatus = {};
-
+  let lastACS = {};
   function buildPopup(item){
     const lat = parseFloat(item.latitude||0);
     const lon = parseFloat(item.longitude||0);
@@ -140,20 +140,24 @@
     addOrUpdateMarker(key, data);
     if(!lastStatus[key]) notify(`Pengguna baru: ${data.user || key}`);
     lastStatus[key] = data.status;
+    console.log('Added marker for key:', data.user || key );
   });
 
   ref.on('child_changed', snap => {
     const key = snap.key; const data = snap.val();
     const prev = lastStatus[key];
     addOrUpdateMarker(key, data);
+    
+  console.log('Updated marker for key:', data.user || key );
     if(prev!==undefined && String(prev) !== String(data.status)){
       const s = data.status==1 ? 'online' : 'offline';
       notify(`User ${data.user || key} sekarang ${s}`);
+      console.log('Status changed for key:', data.user || key , 'to', s);
     }
   
     lastStatus[key] = data.status;
       // --- Notif perubahan ACS menjadi 1 ---
-  const prevACS = lastACS[key]; // bisa undefined (tidak masalah)
+   prevACS = lastACS[key]; // bisa undefined (tidak masalah)
 
   // Hanya bunyikan jika:
   // 1. prevACS SUDAH ADA (undefined = berarti pertama kali, abaikan)
@@ -162,12 +166,13 @@
   if (prevACS !== undefined && String(prevACS) !== String(data.ACS)) {
     if (Number(data.ACS) === 1) {
       notify(`User ${data.user || key}: ACS berubah menjadi 1`);
+      console.log('ACS changed to 1 for key:', data.user || key);
     }
   }
 
   // Simpan ACS dan status terakhir
   lastStatus[key] = data.status;
-  lastACS[key] = data.acs;
+  lastACS[key] = data.ACS;
 });
   
 
@@ -176,6 +181,8 @@
     removeMarker(key);
     notify(`User dihapus: ${data && data.user ? data.user : key}`);
     delete lastStatus[key];
+    delete lastACS[key];
+    console.log('Removed marker for key:', key);
   });
 
   // Fit bounds button
