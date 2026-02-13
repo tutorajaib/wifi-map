@@ -157,10 +157,10 @@
 
   // Hanya bunyikan jika:
   // 1. prevACS SUDAH ADA (undefined = berarti pertama kali, abaikan)
-  // 2. prevACS != data.acs
-  // 3. data.acs == 1
-  if (prevACS !== undefined && String(prevACS) !== String(data.acs)) {
-    if (Number(data.acs) === 1) {
+  // 2. prevACS != data.ACS
+  // 3. data.ACS == 1
+  if (prevACS !== undefined && String(prevACS) !== String(data.ACS)) {
+    if (Number(data.ACS) === 1) {
       notify(`User ${data.user || key}: ACS berubah menjadi 1`);
     }
   }
