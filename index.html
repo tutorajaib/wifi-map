@@ -169,7 +169,7 @@
   lastStatus[key] = data.status;
   lastACS[key] = data.acs;
 });
-  });
+  
 
   ref.on('child_removed', snap => {
     const key = snap.key; const data = snap.val();
