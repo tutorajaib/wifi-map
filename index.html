@@ -150,7 +150,25 @@
       const s = data.status==1 ? 'online' : 'offline';
       notify(`User ${data.user || key} sekarang ${s}`);
     }
+  
     lastStatus[key] = data.status;
+      // --- Notif perubahan ACS menjadi 1 ---
+  const prevACS = lastACS[key]; // bisa undefined (tidak masalah)
+
+  // Hanya bunyikan jika:
+  // 1. prevACS SUDAH ADA (undefined = berarti pertama kali, abaikan)
+  // 2. prevACS != data.acs
+  // 3. data.acs == 1
+  if (prevACS !== undefined && String(prevACS) !== String(data.acs)) {
+    if (Number(data.acs) === 1) {
+      notify(`User ${data.user || key}: ACS berubah menjadi 1`);
+    }
+  }
+
+  // Simpan ACS dan status terakhir
+  lastStatus[key] = data.status;
+  lastACS[key] = data.acs;
+});
   });
 
   ref.on('child_removed', snap => {
