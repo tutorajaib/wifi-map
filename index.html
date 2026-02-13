@@ -97,7 +97,7 @@
 
   function addOrUpdateMarker(key, data){
     if(!data || data.suspend==='suspend') return;
-    if(!data || !data.acs) return;
+    if(!data || data.acs!== 1) return;
     if(!data.latitude || !data.longitude) return;
     const lat = parseFloat(data.latitude);
     const lng = parseFloat(data.longitude);
