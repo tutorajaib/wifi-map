@@ -12,11 +12,11 @@
     body{margin:0;font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial}
     #map{height:100vh}
     .legend{background:#fff;padding:8px;border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,.15)}
-    .marker-online{background:#16a34a;border-radius:50%;width:12px;height:12px;display:inline-block;margin-right:6px}
-    .marker-offline{background:#ef4444;border-radius:50%;width:12px;height:12px;display:inline-block;margin-right:6px}
+    .marker-online{background:#16a34a;border-radius:50%;width:12px;height:12px;display:inline-block;margin-right:6px;border:2px solid white}
+    .marker-offline{background:#ef4444;border-radius:50%;width:12px;height:12px;display:inline-block;margin-right:6px;border:2px solid white}
     .top-controls{position:absolute;left:8px;top:8px;z-index:1000;display:flex;gap:8px}
-    .top-controls select, .top-controls button{padding:6px;border-radius:6px;border:1px solid #ddd;background:#fff}
-    .notif-bar{position:absolute;right:8px;top:8px;z-index:1000;background:rgba(255,255,255,0.95);padding:8px;border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,.12)}
+    .top-controls select, .top-controls button{padding:6px;border-radius:6px;border:1px solid #ddd;background:#fff;cursor:pointer}
+    .notif-bar{position:absolute;right:50px;top:8px;z-index:1000;background:rgba(255,255,255,0.95);padding:8px;border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,.12);max-width:250px}
   </style>
 </head>
 <body>
@@ -25,7 +25,6 @@
       <option value="osm">OpenStreetMap</option>
       <option value="sat">Esri Satellite</option>
       <option value="topo">OpenTopoMap</option>
-      <option value="stamen">Stamen Toner</option>
     </select>
     <button id="fitAll">Fit Semua Marker</button>
   </div>
@@ -35,172 +34,185 @@
   <audio id="notifSound" src="https://www.myinstants.com/media/sounds/notification.mp3" preload="auto"></audio>
 
 <script>
-  // Ubah sesuai RTDB Anda
+  // Konfigurasi Firebase
   const firebaseConfig = { databaseURL: "https://wifi-maps-fed29-default-rtdb.asia-southeast1.firebasedatabase.app/" };
   firebase.initializeApp(firebaseConfig);
   const db = firebase.database();
   const ref = db.ref('pppoe');
 
-  // Tile providers
-  const baseOSM = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'});
+  // Tile Providers
+  const baseOSM = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OSM'});
   const baseEsriSat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'© Esri'});
   const baseTopo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxZoom:17,attribution:'© OpenTopoMap'});
-  const baseStamen = L.tileLayer('https://stamen-tiles.a.ssl.fastly.net/toner/{z}/{x}/{y}.png',{maxZoom:20,attribution:'Stamen'});
 
-  const map = L.map('map',{layers:[baseOSM]}).setView([-7.14,110.95],14);
-  const baseMaps = {'OpenStreetMap':baseOSM,'Esri Satellite':baseEsriSat,'OpenTopoMap':baseTopo,'Stamen Toner':baseStamen};
-  L.control.layers(baseMaps,null,{collapsed:true}).addTo(map);
+  // 1. Inisialisasi Layer Group (Overlay)
+  const layerWithACS = L.layerGroup();
+  const layerNoACS = L.layerGroup();
 
+  const map = L.map('map',{
+    layers: [baseOSM, layerWithACS, layerNoACS] // Aktifkan semua di awal
+  }).setView([-7.14, 110.95], 14);
+
+  // 2. Tambahkan Control Layer di Pojok Kanan Atas
+  const baseMaps = {'OpenStreetMap':baseOSM,'Esri Satellite':baseEsriSat,'OpenTopoMap':baseTopo};
+  const overlayMaps = {
+    "User with ACS": layerWithACS,
+    "User No ACS": layerNoACS
+  };
+  L.control.layers(baseMaps, overlayMaps, {collapsed:false}).addTo(map);
+
+  // Dropdown Basemap manual (opsional, karena sudah ada di L.control.layers)
   document.getElementById('basemapSelect').addEventListener('change',e=>{
     const v = e.target.value;
     Object.values(baseMaps).forEach(l=>map.removeLayer(l));
     if(v==='osm') map.addLayer(baseOSM);
     else if(v==='sat') map.addLayer(baseEsriSat);
     else if(v==='topo') map.addLayer(baseTopo);
-    else if(v==='stamen') map.addLayer(baseStamen);
   });
 
-  // Marker handling
+  // Marker Icons
   const onlineIcon = L.divIcon({className:'',html:'<span class="marker-online"></span>',iconSize:[14,14]});
   const offlineIcon = L.divIcon({className:'',html:'<span class="marker-offline"></span>',iconSize:[14,14]});
+  
   const markers = {};
-  const markerGroup = L.layerGroup().addTo(map);
-
-  const notifAudio = document.getElementById('notifSound');
-  const notifBar = document.getElementById('notifBar');
   let lastStatus = {};
   let lastACS = {};
-  function buildPopup(item){
+
+function buildPopup(item){
     const lat = parseFloat(item.latitude||0);
     const lon = parseFloat(item.longitude||0);
-    const gmLink = `https://www.google.com/maps?q=${lat},${lon}`;
+    const gmLink = `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
     const waLink = item.whatsapp ? `https://wa.me/${item.whatsapp.replace(/[^0-9]/g,'')}` : '#';
+    const statusColor = (item.online==1 || item.status==1) ? 'green' : 'red';
+    const statusText = (item.online==1 || item.status==1) ? 'Online' : 'Offline';
+
     return `
-        <div style="min-width:180px">
-          <strong>${item.fullname}</strong><br/>
-          <small>${item.user}</small><br/>
-          <small>ip address : <a href="http://${item.address}">${item.address}</a></small><br/>
-          <small>Profile : ${item.profile}</a></small><br/>
-          <small>Service : ${item.service}</a></small><br/>
-          <small>Radius : ${item.radius}</a></small><br/>
-          <small>nas : ${item.nas}</a></small><br/>
-          <small>ACS : ${item.ACS}</a></small><br/>
-          <small>Modem : ${item.modem}</a></small><br/>
-          <small>RxPower : ${item.rxpower}</a></small><br/>
-          <small>uptime : ${item.uptime}</a></small><br/>
-          Aktif: ${item.activedate}<br/>
-          Status: ${item.status==1 ? '<span style="color:green">Online</span>' : '<span style="color:red">Offline</span>'}<br/>
-          <a href="${gmLink}" target="_blank">Buka di Maps</a> • <a href="${waLink}" target="_blank">WhatsApp</a>
+      <div style="font-size:12px;">
+        <strong style="font-size:14px;">${item.fullname || 'Tanpa Nama'}</strong><br/>
+        <span class="popup-label">User:</span> ${item.user}<br/>
+        <span class="popup-label">IP:</span> <a href="http://${item.address}" target="_blank">${item.address}</a><br/>
+        <span class="popup-label">Profile:</span> ${item.profile || '-'}<br/>
+        <span class="popup-label">Service:</span> ${item.service || '-'}<br/>
+        <span class="popup-label">Radius:</span> ${item.radius || '-'}<br/>
+        <span class="popup-label">NAS:</span> ${item.nas || '-'}<br/>
+        <span class="popup-label">ACS:</span> ${item.ACS || '-'}<br/>
+        <button onclick="updateACS('${item.user}')" style="margin:4px 0; display:block; cursor:pointer; width:100%">Update ACS: ${item.user}</button>
+        <span class="popup-label">Modem:</span> ${item.modem || '-'}<br/>
+        <span class="popup-label">RxPower:</span> ${item.rxpower || '-'}<br/>
+        <span class="popup-label">Uptime:</span> ${item.uptime || '-'}<br/>
+        <span class="popup-label">Aktif:</span> ${item.activedate || '-'}<br/>
+        <span class="popup-label">Status:</span> <span style="color:${statusColor}; font-weight:bold">${statusText}</span><br/>
+        <hr style="margin:8px 0; border:0; border-top:1px solid #eee"/>
+        <div style="display:flex; justify-content:space-between">
+          <a href="${gmLink}" target="_blank" style="text-decoration:none">📍 Google Maps</a>
+          <a href="${waLink}" target="_blank" style="text-decoration:none">💬 WhatsApp</a>
         </div>
+      </div>
     `;
+  }
+
+  function updateACS(deviceid){
+    fetch(`http://192.168.18.1:5678/webhook/production/?devid=${deviceid}`)
+      .then(() => alert('Request sent for ' + deviceid))
+      .catch(e => console.error('Fetch error:', e));
   }
 
   function addOrUpdateMarker(key, data){
     if(!data || data.suspend==='suspend') return;
-    if(!data || data.ACS) return;
     if(!data.latitude || !data.longitude) return;
+
     const lat = parseFloat(data.latitude);
     const lng = parseFloat(data.longitude);
     if(Number.isNaN(lat)||Number.isNaN(lng)) return;
 
     const icon = (data.online==1 || data.status==1) ? onlineIcon : offlineIcon;
+    
+    // 3. Logika Pemilihan Layer Berdasarkan Field ACS
+    const hasACS = (data.ACS && data.ACS !== "" && data.ACS !== "0");
+    const targetLayer = hasACS ? layerWithACS : layerNoACS;
 
     if(markers[key]){
-      // update position & popup
+      // Update posisi dan icon
       markers[key].setLatLng([lat,lng]);
       markers[key].setIcon(icon);
       markers[key].setPopupContent(buildPopup(data));
+
+      // Jika layer berubah (misal dari No ACS ke With ACS), pindahkan
+      if(markers[key]._currentLayer !== targetLayer){
+        markers[key]._currentLayer.removeLayer(markers[key]);
+        targetLayer.addLayer(markers[key]);
+        markers[key]._currentLayer = targetLayer;
+      }
     } else {
+      // Buat marker baru
       const m = L.marker([lat,lng],{icon}).bindPopup(buildPopup(data));
-      markerGroup.addLayer(m);
+      m._currentLayer = targetLayer;
+      targetLayer.addLayer(m);
       markers[key] = m;
     }
   }
 
   function removeMarker(key){
     if(markers[key]){
-      markerGroup.removeLayer(markers[key]);
+      markers[key]._currentLayer.removeLayer(markers[key]);
       delete markers[key];
     }
   }
 
   function notify(text){
-    // tampilkan di UI dan mainkan suara
     notifBar.textContent = text;
-    //try{ notifAudio.currentTime = 0; notifAudio.play().catch(()=>{}); }catch(e){}
-    // juga bicara singkat
-    try{
-      const u = new SpeechSynthesisUtterance(text); u.lang='id-ID'; u.rate=1; speechSynthesis.speak(u);
-    }catch(e){}
+    try {
+      const u = new SpeechSynthesisUtterance(text); u.lang='id-ID'; u.rate=1.1; 
+      speechSynthesis.cancel(); // Hentikan bicara sebelumnya jika menumpuk
+      speechSynthesis.speak(u);
+    } catch(e){}
   }
 
-  // Realtime listeners
+  // Firebase Realtime Listeners
   ref.on('child_added', snap => {
     const key = snap.key; const data = snap.val();
     addOrUpdateMarker(key, data);
-    if(!lastStatus[key]) notify(`Pengguna baru: ${data.user || key}`);
     lastStatus[key] = data.status;
-    console.log('Added marker for key:', data.user || key );
+    lastACS[key] = data.ACS;
   });
 
   ref.on('child_changed', snap => {
     const key = snap.key; const data = snap.val();
-    const prev = lastStatus[key];
+    const prevStatus = lastStatus[key];
+    const prevACS = lastACS[key];
+
     addOrUpdateMarker(key, data);
     
-  console.log('Updated marker for key:', data.user || key );
-    if(prev!==undefined && String(prev) !== String(data.status)){
-      const s = data.status==1 ? 'online' : 'offline';
-      notify(`User ${data.user || key} sekarang ${s}`);
-      console.log('Status changed for key:', data.user || key , 'to', s);
+    // Notif Perubahan Status Online/Offline
+    if(prevStatus !== undefined && String(prevStatus) !== String(data.status)){
+      const s = data.status == 1 ? 'Online' : 'Offline';
+      notify(`${data.user || key} ${s}`);
     }
-  
+
+    // Notif Perubahan ACS (hanya jika berubah ke 1)
+    if (prevACS !== undefined && String(prevACS) !== String(data.ACS)) {
+      if (Number(data.ACS) === 1) {
+        notify(`User ${data.user || key}: ACS aktif`);
+      }
+    }
+
     lastStatus[key] = data.status;
-      // --- Notif perubahan ACS menjadi 1 ---
-   prevACS = lastACS[key]; // bisa undefined (tidak masalah)
-
-  // Hanya bunyikan jika:
-  // 1. prevACS SUDAH ADA (undefined = berarti pertama kali, abaikan)
-  // 2. prevACS != data.ACS
-  // 3. data.ACS == 1
-  if (prevACS !== undefined && String(prevACS) !== String(data.ACS)) {
-    if (Number(data.ACS) === 1) {
-      notify(`User ${data.user || key}: ACS berubah menjadi 1`);
-      console.log('ACS changed to 1 for key:', data.user || key);
-    }
-  }
-
-  // Simpan ACS dan status terakhir
-  lastStatus[key] = data.status;
-  lastACS[key] = data.ACS;
-});
-  
-
-  ref.on('child_removed', snap => {
-    const key = snap.key; const data = snap.val();
-    removeMarker(key);
-    notify(`User dihapus: ${data && data.user ? data.user : key}`);
-    delete lastStatus[key];
-    delete lastACS[key];
-    console.log('Removed marker for key:', key);
+    lastACS[key] = data.ACS;
   });
 
-  // Fit bounds button
+  ref.on('child_removed', snap => {
+    removeMarker(snap.key);
+    notify(`User dihapus: ${snap.val()?.user || snap.key}`);
+    delete lastStatus[snap.key];
+    delete lastACS[snap.key];
+  });
+
+  // Fit bounds
   document.getElementById('fitAll').addEventListener('click', ()=>{
     const latlngs = [];
     Object.values(markers).forEach(m=>latlngs.push(m.getLatLng()));
     if(latlngs.length) map.fitBounds(L.latLngBounds(latlngs).pad(0.2));
-    else alert('Belum ada marker.');
   });
-
-  // small safety: fallback ke fetch sekali jika perlu
-  setTimeout(()=>{
-    // jika belum ada marker setelah 2 detik, lakukan fetch sekali
-    if(Object.keys(markers).length===0){
-      fetch(firebaseConfig.databaseURL + 'pppoe.json')
-        .then(r=>r.json()).then(d=>{ if(d) Object.entries(d).forEach(([k,v])=>addOrUpdateMarker(k,v)); });
-    }
-  },2000);
 </script>
 </body>
 </html>
