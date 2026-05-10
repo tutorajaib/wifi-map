@@ -4,10 +4,14 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>PPPoE Live Monitor — Advanced Search</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  <link 
+    rel="stylesheet" 
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" 
+    crossorigin="anonymous" 
+  />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin="anonymous"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js" crossorigin="anonymous"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js" crossorigin="anonymous"></script>
   <style>
     body{margin:0;font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial;background:#f4f4f4}
     #map{height:100vh;z-index: 1;}
@@ -37,10 +41,34 @@
 
     .marker-online { background:#16a34a; border-radius:50%; width:12px; height:12px; display:inline-block; border:2px solid white; }
     .marker-offline { background:#ef4444; border-radius:50%; width:12px; height:12px; display:inline-block; border:2px solid white; }
+    .marker-odp { background:#6366f1; border-radius:50%; width:12px; height:12px; display:inline-block; border:2px solid white; }
     
     .popup-label { color: #666; font-weight: bold; margin-right: 4px; }
     .btn-update { background: #007bff; color: white; border: none; padding: 8px; border-radius: 4px; cursor: pointer; width: 100%; margin: 8px 0; font-weight: bold; }
     .btn-update:hover { background: #0056b3; }
+    .btn-update:disabled { background: #ccc; cursor: not-allowed; }
+    
+    /* Edit form styles */
+    .edit-input {
+      width: 100%; 
+      padding: 4px 6px; 
+      border: 1px solid #ccc; 
+      border-radius: 3px; 
+      font-size: 12px;
+      margin-bottom: 2px;
+    }
+    .edit-input:focus { 
+      border-color: #007bff; 
+      outline: none; 
+      box-shadow: 0 0 3px rgba(0,123,255,0.3);
+    }
+    .edit-label {
+      display: block; 
+      font-weight: bold; 
+      margin-bottom: 2px;
+      font-size: 11px;
+    }
+
   </style>
 </head>
 <body>
@@ -52,9 +80,11 @@
         <option value="sat">Esri Satellite</option>
       </select>
       <button id="fitAll">Fit Semua</button>
+      <button id="showConnectedPPPoE" title="Tampilkan PPPoE terhubung ke ODP">🔗 PPPoE</button>
+      <button id="clearOdpSelection" title="Clear ODP Selection">❌ ODP</button>
     </div>
     
-    <input type="text" id="searchInput" class="search-box" list="combinedList" placeholder="Cari Nama, User, atau SSID..." />
+    <input type="text" id="searchInput" class="search-box" list="combinedList" placeholder="Cari Nama, User, SSID, atau ODP..." />
     <datalist id="combinedList"></datalist>
   </div>
 
@@ -66,53 +96,479 @@
   firebase.initializeApp(firebaseConfig);
   const db = firebase.database();
   const ref = db.ref('pppoe');
+  const odpRef = db.ref('odps/qco52JdRyPSRXbT2RMPH8lSqTUE3');
 
-  const baseOSM = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19});
+  const baseOSM = L.tileLayer('https://map.tkjsakti.my.id/map.php?lyrs=s&z={z}&x={x}&y={y}',{maxZoom:19});
+  // CATATAN: Jika map.tkjsakti.my.id return 403, gunakan OpenStreetMap sebagai alternatif:
+  // const baseOSM = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution: '© OpenStreetMap contributors'});
+  
   const baseEsriSat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19});
   
   const layerWithACS = L.layerGroup();
   const layerNoACS = L.layerGroup();
+  const layerODP = L.layerGroup();
+  const layerConnections = L.layerGroup();
 
-  const map = L.map('map', { layers: [baseOSM, layerWithACS, layerNoACS] }).setView([-7.14, 110.95], 14);
-  L.control.layers({'Jalan': baseOSM, 'Satelit': baseEsriSat}, {"Dengan ACS": layerWithACS, "Tanpa ACS": layerNoACS}).addTo(map);
+  const map = L.map('map', { layers: [baseOSM, layerWithACS, layerNoACS, layerODP, layerConnections] }).setView([-7.14, 110.95], 14);
+  L.control.layers({'Jalan': baseOSM, 'Satelit': baseEsriSat}, {"Dengan ACS": layerWithACS, "Tanpa ACS": layerNoACS, "ODP": layerODP, "Koneksi ke ODP": layerConnections}).addTo(map);
 
   const onlineIcon = L.divIcon({ className: '', html: '<span class="marker-online"></span>', iconSize: [14, 14] });
   const offlineIcon = L.divIcon({ className: '', html: '<span class="marker-offline"></span>', iconSize: [14, 14] });
+  const odpIcon = L.divIcon({ className: '', html: '<span class="marker-odp"></span>', iconSize: [14, 14] });
   
   const markers = {};
-  const dataStore = {}; 
+  const odpMarkers = {};
+  const connections = {};
+  const dataStore = {};
+  const odpDataStore = {};
+  const indexByUser = {};
+  const indexByFullname = {};
+  const indexBySSID = {};
 
-  function buildPopup(item) {
+  // Variabel untuk menyimpan ODP yang terakhir diklik
+  let lastodp = null;
+
+  function normalizeKey(str) {
+    return (str || '').toString().trim().toLowerCase();
+  }
+
+  // Fungsi untuk mencari ODP berdasarkan nama
+  function findODPByName(odpName) {
+    if (!odpName) return null;
+    const normalizedSearch = normalizeKey(odpName);
+    for (const key in odpDataStore) {
+      const odp = odpDataStore[key];
+      if (normalizeKey(odp.name) === normalizedSearch) {
+        return odp;
+      }
+    }
+    return null;
+  }
+
+  function findODPKeyByName(odpName) {
+    if (!odpName) return null;
+    const normalizedSearch = normalizeKey(odpName);
+    for (const key in odpDataStore) {
+      const odp = odpDataStore[key];
+      if (normalizeKey(odp.name) === normalizedSearch) {
+        return key;
+      }
+    }
+    return null;
+  }
+
+  function deleteODP(odpName) {
+    if (!odpName) return;
+
+    const confirmed = confirm(`Apakah Anda yakin ingin menghapus ODP: ${odpName}?\n\nTindakan ini tidak dapat dibatalkan!`);
+    if (!confirmed) return;
+
+    const odpKey = findODPKeyByName(odpName);
+    if (!odpKey) {
+      alert('ODP tidak ditemukan!');
+      return;
+    }
+
+    odpRef.child(odpKey).remove()
+      .then(() => {
+        console.log('ODP berhasil dihapus:', odpName);
+        document.getElementById('notifBar').innerText = `ODP ${odpName} dihapus`;
+
+        // Hapus assign ODP dari semua PPPoE yang terhubung ke ODP ini
+        Object.keys(dataStore).forEach(pppoeKey => {
+          if (dataStore[pppoeKey].odp && normalizeKey(dataStore[pppoeKey].odp) === normalizeKey(odpName)) {
+            ref.child(pppoeKey).update({ odp: '' }).catch(e => console.error('Gagal reset odp di PPPoE', e));
+          }
+        });
+
+        // Update semua koneksi PPPoE
+        setTimeout(updateAllConnectionsFromODP, 50);
+      })
+      .catch(error => {
+        console.error('Error deleting ODP:', error);
+        alert(`Gagal menghapus ODP: ${error.message}`);
+      });
+  }
+
+  // Fungsi untuk menggambar garis koneksi dari PPPoE ke ODP
+  function drawConnectionToPPPoE(pppoeKey, pppoeData, odpData) {
+    if (!pppoeData || !odpData || !pppoeData.latitude || !pppoeData.longitude || !odpData.lat || !odpData.lng) return;
+
+    const pppoeLat = parseFloat(pppoeData.latitude);
+    const pppoeLng = parseFloat(pppoeData.longitude);
+    const odpLat = parseFloat(odpData.lat);
+    const odpLng = parseFloat(odpData.lng);
+
+    // Hapus koneksi yang sudah ada
+    if (connections[pppoeKey]) {
+      layerConnections.removeLayer(connections[pppoeKey]);
+    }
+
+    // Buat polyline baru
+    const latlngs = [
+      [pppoeLat, pppoeLng],
+      [odpLat, odpLng]
+    ];
+
+    const isOnline = (pppoeData.online == 1 || pppoeData.status == 1);
+    const color = isOnline ? '#16a34a' : '#ef4444'; // hijau untuk online, merah untuk offline
+
+    const polyline = L.polyline(latlngs, {
+      color: color,
+      weight: 2,
+      opacity: 0.7,
+      dashArray: '5, 5' // garis putus-putus
+    });
+
+    layerConnections.addLayer(polyline);
+    connections[pppoeKey] = polyline;
+  }
+
+  // Fungsi untuk menghapus koneksi
+  function removeConnection(pppoeKey) {
+    if (connections[pppoeKey]) {
+      layerConnections.removeLayer(connections[pppoeKey]);
+      delete connections[pppoeKey];
+    }
+  }
+
+  // Fungsi untuk update koneksi berdasarkan ODP yang di-assign
+  function updateConnectionForPPPoE(pppoeKey, pppoeData) {
+    if (!pppoeData) return;
+
+    // Jika ada ODP yang di-assign
+    if (pppoeData.odp) {
+      const assignedODP = findODPByName(pppoeData.odp);
+      if (assignedODP) {
+        drawConnectionToPPPoE(pppoeKey, pppoeData, assignedODP);
+      } else {
+        removeConnection(pppoeKey);
+      }
+    } else {
+      // Jika tidak ada ODP yang di-assign, hapus koneksinya
+      removeConnection(pppoeKey);
+    }
+  }
+
+  // Fungsi untuk update semua koneksi dari ODP
+  function updateAllConnectionsFromODP() {
+    Object.keys(dataStore).forEach(pppoeKey => {
+      const pppoeData = dataStore[pppoeKey];
+      if (pppoeData) {
+        updateConnectionForPPPoE(pppoeKey, pppoeData);
+      }
+    });
+  }
+
+  function setIndex(key, data) {
+    const userKey = normalizeKey(data.user);
+    const fullnameKey = normalizeKey(data.fullname);
+    const ssidKey = normalizeKey(data.ssid);
+
+    if (userKey) indexByUser[userKey] = key;
+    if (fullnameKey) indexByFullname[fullnameKey] = key;
+    if (ssidKey) indexBySSID[ssidKey] = key;
+  }
+
+  function clearIndex(key, oldData) {
+    if (!oldData) return;
+    const userKey = normalizeKey(oldData.user);
+    const fullnameKey = normalizeKey(oldData.fullname);
+    const ssidKey = normalizeKey(oldData.ssid);
+
+    if (userKey && indexByUser[userKey] === key) delete indexByUser[userKey];
+    if (fullnameKey && indexByFullname[fullnameKey] === key) delete indexByFullname[fullnameKey];
+    if (ssidKey && indexBySSID[ssidKey] === key) delete indexBySSID[ssidKey];
+  }
+
+  function addOrUpdateOdpMarker(key, data) {
+    if (!data.lat || !data.lng) return;
+
+    odpDataStore[key] = data;
+
+    const lat = parseFloat(data.lat);
+    const lng = parseFloat(data.lng);
+
+    if (odpMarkers[key]) {
+      odpMarkers[key].setLatLng([lat, lng]).setPopupContent(buildOdpPopup(data));
+    } else {
+      const m = L.marker([lat, lng], { icon: odpIcon }).bindPopup(buildOdpPopup(data));
+      
+      // Tambahkan event listener untuk menyimpan nama ODP ketika diklik
+      m.on('click', function() {
+        lastodp = data.name || 'ODP-' + key;
+        console.log('ODP diklik:', lastodp);
+        
+        // Hitung jumlah PPPoE yang terhubung ke ODP ini
+        const connectedPPPoE = Object.values(dataStore).filter(pppoe => pppoe.odp === lastodp).length;
+        
+        // Update notifikasi bar untuk menampilkan ODP yang dipilih dan jumlah koneksi
+        document.getElementById('notifBar').innerText = `ODP: ${lastodp} (${connectedPPPoE} PPPoE terhubung)`;
+      });
+      
+      layerODP.addLayer(m);
+      odpMarkers[key] = m;
+    }
+  }
+
+  function buildOdpPopup(item) {
+    const lat = parseFloat(item.lat || 0);
+    const lng = parseFloat(item.lng || 0);
+    const odpName = item.name || 'ODP';
+    
+    // Hitung jumlah PPPoE yang terhubung ke ODP ini
+    const connectedCount = Object.values(dataStore).filter(pppoe => pppoe.odp === odpName).length;
+
+    const gmLink = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+
+    return `
+      <div style="font-size:12px; min-width: 200px;">
+        <strong style="font-size:14px; display:block; margin-bottom:5px;">ODP: ${odpName}</strong>
+        <span class="popup-label">Koordinat:</span> ${lat.toFixed(6)}, ${lng.toFixed(6)}<br/>
+        <span class="popup-label">PPPoE Terhubung:</span> ${connectedCount}<br/>
+        
+        <hr style="margin:8px 0; border:0; border-top:1px solid #eee"/>
+        <div style="display:flex; gap:5px; margin:8px 0;">
+          <button class="btn-update" onclick="deleteODP('${odpName.replace(/'/g, "\\'")}')" style="background:#dc3545; flex:1; padding:4px;">🗑️ Hapus ODP</button>
+        </div>
+        <hr style="margin:8px 0; border:0; border-top:1px solid #eee"/>
+        <div style="display:flex; justify-content:space-between">
+          <a href="${gmLink}" target="_blank" style="text-decoration:none">📍 Google Maps</a>
+        </div>
+      </div>
+    `;
+  }
+
+  function buildPopup(item, isEditMode = false) {
     const lat = parseFloat(item.latitude || 0);
     const lon = parseFloat(item.longitude || 0);
-    
-    // Perbaikan Variabel yang hilang
+
     const gmLink = `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
     const waLink = item.whatsapp ? `https://wa.me/${item.whatsapp.replace(/[^0-9]/g,'')}` : '#';
     const isOnline = (item.online == 1 || item.status == 1);
     const statusColor = isOnline ? 'green' : 'red';
     const statusText = isOnline ? 'Online' : 'Offline';
 
-    return `
-      <div style="font-size:12px; min-width: 200px;">
-        <strong style="font-size:14px; display:block; margin-bottom:5px;">${item.fullname || 'Tanpa Nama'}</strong>
-        <span class="popup-label">User:</span> ${item.user || '-'}<br/>
-        <span class="popup-label">SSID:</span> ${item.ssid || '-'}<br/>
-        <span class="popup-label">IP:</span> <a href="http://${item.address}" target="_blank">${item.address || '-'}</a><br/>
-        <span class="popup-label">Profile:</span> ${item.profile || '-'}<br/>
-        <span class="popup-label">RxPower:</span> ${item.rxpower || '-'}<br/>
-        <span class="popup-label">Uptime:</span> ${item.uptime || '-'}<br/>
-        <span class="popup-label">Status:</span> <span style="color:${statusColor}; font-weight:bold">${statusText}</span><br/>
-        
-        <button class="btn-update" onclick="updateACS('${item.user}')">Update ACS</button>
-        
-        <hr style="margin:8px 0; border:0; border-top:1px solid #eee"/>
-        <div style="display:flex; justify-content:space-between">
-          <a href="${gmLink}" target="_blank" style="text-decoration:none">📍 Google Maps</a>
-          <a href="${waLink}" target="_blank" style="text-decoration:none">💬 WhatsApp</a>
+    if (isEditMode) {
+      // Edit mode - tampilkan form
+      return `
+        <div style="font-size:12px; min-width: 250px;">
+          <strong style="font-size:14px; display:block; margin-bottom:10px;">Edit PPPoE Data</strong>
+          
+          <div style="margin-bottom:8px;">
+            <label class="edit-label">Nama:</label>
+            <input type="text" id="edit-fullname" value="${item.fullname || ''}" class="edit-input" />
+          </div>
+          
+          <div style="margin-bottom:8px;">
+            <label class="edit-label">User:</label>
+            <input type="text" id="edit-user" value="${item.user || ''}" class="edit-input" />
+          </div>
+          
+          <div style="margin-bottom:8px;">
+            <label class="edit-label">SSID:</label>
+            <input type="text" id="edit-ssid" value="${item.ssid || ''}" class="edit-input" />
+          </div>
+          
+          <div style="margin-bottom:8px;">
+            <label class="edit-label">IP Address:</label>
+            <input type="text" id="edit-address" value="${item.address || ''}" class="edit-input" />
+          </div>
+          
+          <div style="margin-bottom:8px;">
+            <label class="edit-label">Profile:</label>
+            <input type="text" id="edit-profile" value="${item.profile || ''}" class="edit-input" />
+          </div>
+          
+          <div style="margin-bottom:8px;">
+            <label class="edit-label">RxPower:</label>
+            <input type="text" id="edit-rxpower" value="${item.rxpower || ''}" class="edit-input" />
+          </div>
+          
+          <div style="margin-bottom:8px;">
+            <label class="edit-label">ODP:</label>
+            <div style="display: flex; gap: 5px;">
+              <input type="text" id="edit-odp" value="${item.odp || ''}" class="edit-input" placeholder="Nama ODP terhubung" style="flex: 1;" />
+              <button type="button" onclick="assignSelectedODP()" class="btn-update" style="background: #17a2b8; padding: 4px 8px; font-size: 10px; white-space: nowrap;">📍 Assign</button>
+            </div>
+          </div>
+          
+          <div style="margin-bottom:8px;">
+            <label class="edit-label">WhatsApp:</label>
+            <input type="text" id="edit-whatsapp" value="${item.whatsapp || ''}" class="edit-input" placeholder="628xxxxxxxxx" />
+          </div>
+          
+          <div style="display:flex; gap:5px; margin-top:10px;">
+            <button class="btn-update" onclick="savePPPoEEdits('${item.user || ''}')">💾 Save</button>
+            <button class="btn-update" onclick="cancelPPPoEEdits('${item.user || ''}')" style="background:#6c757d;">❌ Cancel</button>
+          </div>
         </div>
-      </div>
-    `;
+      `;
+    } else {
+      // View mode - tampilkan data
+      return `
+        <div style="font-size:12px; min-width: 200px;">
+          <strong style="font-size:14px; display:block; margin-bottom:5px;">${item.fullname || 'Tanpa Nama'}</strong>
+          <span class="popup-label">User:</span> ${item.user || '-'}<br/>
+          <span class="popup-label">SSID:</span> ${item.ssid || '-'}<br/>
+          <span class="popup-label">IP:</span> <a href="http://${item.address}" target="_blank">${item.address || '-'}</a><br/>
+          <span class="popup-label">Profile:</span> ${item.profile || '-'}<br/>
+          <span class="popup-label">RxPower:</span> ${item.rxpower || '-'}<br/>
+          <span class="popup-label">ODP:</span> ${item.odp || '-'}<br/>
+          <span class="popup-label">Uptime:</span> ${item.uptime || '-'}<br/>
+          <span class="popup-label">Status:</span> <span style="color:${statusColor}; font-weight:bold">${statusText}</span><br/>
+          
+          <div style="display:flex; gap:5px; margin:8px 0;">
+            <button class="btn-update" onclick="editPPPoE('${item.user || ''}')" style="background:#28a745; flex:1;">✏️ Edit</button>
+            <button class="btn-update" onclick="updateACS('${item.user}')" style="flex:1;">Update ACS</button>
+            <button class="btn-update" onclick="deletePPPoE('${item.user || ''}')" style="background:#dc3545; flex:0.8; padding:4px;">🗑️ Hapus</button>
+          </div>
+          
+          <hr style="margin:8px 0; border:0; border-top:1px solid #eee"/>
+          <div style="display:flex; justify-content:space-between">
+            <a href="${gmLink}" target="_blank" style="text-decoration:none">📍 Google Maps</a>
+            <a href="${waLink}" target="_blank" style="text-decoration:none">💬 WhatsApp</a>
+          </div>
+        </div>
+      `;
+    }
+  }
+
+  // Variabel untuk track marker yang sedang diedit
+  let editingMarker = null;
+
+  function editPPPoE(user) {
+    // Cari marker berdasarkan user
+    const markerKey = Object.keys(dataStore).find(key => dataStore[key].user === user);
+    if (!markerKey || !markers[markerKey]) return;
+
+    editingMarker = markers[markerKey];
+    const item = dataStore[markerKey];
+    
+    // Update popup content ke mode edit
+    editingMarker.setPopupContent(buildPopup(item, true));
+    editingMarker.openPopup();
+  }
+
+  function savePPPoEEdits(oldUser) {
+    if (!editingMarker) return;
+
+    // Disable tombol save dan tampilkan loading
+    const saveBtn = document.querySelector('.btn-update[onclick*="savePPPoEEdits"]');
+    if (saveBtn) {
+      saveBtn.disabled = true;
+      saveBtn.innerHTML = '⏳ Saving...';
+    }
+
+    // Ambil nilai dari form
+    const newData = {
+      fullname: document.getElementById('edit-fullname').value.trim(),
+      user: document.getElementById('edit-user').value.trim(),
+      ssid: document.getElementById('edit-ssid').value.trim(),
+      address: document.getElementById('edit-address').value.trim(),
+      profile: document.getElementById('edit-profile').value.trim(),
+      rxpower: document.getElementById('edit-rxpower').value.trim(),
+      odp: document.getElementById('edit-odp').value.trim(),
+      whatsapp: document.getElementById('edit-whatsapp').value.trim()
+    };
+
+    // Validasi input
+    if (!newData.user) {
+      alert('User tidak boleh kosong!');
+      if (saveBtn) {
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = '💾 Save';
+      }
+      return;
+    }
+
+    // Cari key marker yang sedang diedit
+    const markerKey = Object.keys(dataStore).find(key => dataStore[key].user === oldUser);
+    if (!markerKey) {
+      if (saveBtn) {
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = '💾 Save';
+      }
+      return;
+    }
+
+    // Update data di Firebase
+    const updates = {};
+    updates[markerKey] = { ...dataStore[markerKey], ...newData };
+    
+    ref.update(updates)
+      .then(() => {
+        console.log('Data PPPoE berhasil diupdate:', newData);
+        alert('Data berhasil disimpan!');
+        
+        // Reset editing state
+        editingMarker = null;
+      })
+      .catch(error => {
+        console.error('Error updating PPPoE data:', error);
+        alert('Gagal menyimpan data: ' + error.message);
+        
+        // Re-enable tombol jika gagal
+        if (saveBtn) {
+          saveBtn.disabled = false;
+          saveBtn.innerHTML = '💾 Save';
+        }
+      });
+  }
+
+  function cancelPPPoEEdits(user) {
+    if (!editingMarker) return;
+
+    // Cari data asli
+    const markerKey = Object.keys(dataStore).find(key => dataStore[key].user === user);
+    if (!markerKey) return;
+
+    const originalData = dataStore[markerKey];
+    
+    // Kembali ke view mode
+    editingMarker.setPopupContent(buildPopup(originalData, false));
+    editingMarker = null;
+  }
+
+  function assignSelectedODP() {
+    const odpInput = document.getElementById('edit-odp');
+    if (odpInput && lastodp) {
+      odpInput.value = lastodp;
+      console.log('ODP assigned:', lastodp);
+    } else if (!lastodp) {
+      alert('Pilih ODP terlebih dahulu dengan mengklik marker ODP!');
+    }
+  }
+
+  function deletePPPoE(user) {
+    if (!user) return;
+
+    // Konfirmasi sebelum menghapus
+    const confirmed = confirm(`Apakah Anda yakin ingin menghapus PPPoE: ${user}?\n\nTindakan ini tidak dapat dibatalkan!`);
+    if (!confirmed) return;
+
+    // Cari key marker berdasarkan user
+    const markerKey = Object.keys(dataStore).find(key => dataStore[key].user === user);
+    if (!markerKey) {
+      alert('Data PPPoE tidak ditemukan!');
+      return;
+    }
+
+    // Close popup jika sedang terbuka
+    if (editingMarker && editingMarker.isPopupOpen && editingMarker.isPopupOpen()) {
+      editingMarker.closePopup();
+    }
+
+    // Hapus dari Firebase
+    ref.child(markerKey).remove()
+      .then(() => {
+        console.log('Data PPPoE berhasil dihapus:', user);
+        alert(`PPPoE "${user}" berhasil dihapus!`);
+      })
+      .catch(error => {
+        console.error('Error deleting PPPoE data:', error);
+        alert(`Gagal menghapus PPPoE: ${error.message}`);
+      });
   }
 
   function updateSearchSuggestions() {
@@ -124,6 +580,7 @@
       if (item.fullname) options.add(item.fullname);
       if (item.user) options.add(item.user);
       if (item.ssid) options.add(`SSID: ${item.ssid}`);
+      if (item.odp) options.add(`ODP: ${item.odp}`);
     });
 
     options.forEach(val => {
@@ -133,10 +590,22 @@
     });
   }
 
+  function debounce(fn, ms = 180) {
+    let timeout;
+    return function (...args) {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => fn.apply(this, args), ms);
+    };
+  }
+
   function addOrUpdateMarker(key, data) {
     if (!data.latitude || !data.longitude) return;
-    
-    dataStore[key] = data; 
+
+    const isExisting = Boolean(dataStore[key]);
+    if (isExisting) clearIndex(key, dataStore[key]);
+
+    dataStore[key] = data;
+    setIndex(key, data);
     updateSearchSuggestions();
 
     const lat = parseFloat(data.latitude);
@@ -146,45 +615,71 @@
     const targetLayer = hasACS ? layerWithACS : layerNoACS;
 
     if (markers[key]) {
-      markers[key].setLatLng([lat, lng]).setIcon(icon).setPopupContent(buildPopup(data));
+      markers[key].setLatLng([lat, lng]).setIcon(icon).setPopupContent(buildPopup(data, false));
       if (markers[key]._currentLayer !== targetLayer) {
         markers[key]._currentLayer.removeLayer(markers[key]);
         targetLayer.addLayer(markers[key]);
         markers[key]._currentLayer = targetLayer;
       }
+      if (!markers[key].dragging.enabled()) {
+        markers[key].dragging.enable();
+      }
+      
+      // Reset editing state jika marker ini sedang diedit
+      if (editingMarker === markers[key]) {
+        editingMarker = null;
+      }
     } else {
-      const m = L.marker([lat, lng], { icon }).bindPopup(buildPopup(data));
+      const m = L.marker([lat, lng], { icon, draggable: true })
+        .bindPopup(buildPopup(data, false))
+        .on('dragend', function(event) {
+          const newLatLng = event.target.getLatLng();
+          const originalLatLng = L.latLng(lat, lng);
+          const label = data.user || data.fullname || key;
+          const confirmed = confirm(`Yakin ingin memindahkan marker ${label} ke ${newLatLng.lat.toFixed(6)}, ${newLatLng.lng.toFixed(6)}?`);
+
+          if (!confirmed) {
+            event.target.setLatLng(originalLatLng);
+            document.getElementById('notifBar').innerText = `Perubahan lokasi marker ${label} dibatalkan.`;
+            return;
+          }
+
+          const currentData = dataStore[key] || data;
+          const updatedData = { ...currentData, latitude: newLatLng.lat.toString(), longitude: newLatLng.lng.toString() };
+          addOrUpdateMarker(key, updatedData);
+          ref.child(key).update({ latitude: newLatLng.lat, longitude: newLatLng.lng });
+          document.getElementById('notifBar').innerText = `Marker ${label} dipindahkan ke ${newLatLng.lat.toFixed(6)}, ${newLatLng.lng.toFixed(6)}`;
+        });
       m._currentLayer = targetLayer;
       targetLayer.addLayer(m);
       markers[key] = m;
     }
+
+    // Update koneksi ke ODP jika ada yang di-assign
+    updateConnectionForPPPoE(key, data);
   }
 
   function performSearch(query) {
     let val = query.toLowerCase().trim();
     if (!val) return;
     if (val.startsWith("ssid: ")) val = val.replace("ssid: ", "");
+    if (val.startsWith("odp: ")) val = val.replace("odp: ", "");
 
-    for (const key in markers) {
-      const d = dataStore[key];
-      const matchName = d.fullname && d.fullname.toLowerCase() === val;
-      const matchUser = d.user && d.user.toLowerCase() === val;
-      const matchSSID = d.ssid && d.ssid.toLowerCase() === val;
-
-      if (matchName || matchUser || matchSSID) {
-        map.setView(markers[key].getLatLng(), 18);
-        markers[key].openPopup();
-        return;
-      }
+    const keyExact = indexByUser[val] || indexByFullname[val] || indexBySSID[val];
+    if (keyExact && markers[keyExact]) {
+      map.setView(markers[keyExact].getLatLng(), 18);
+      markers[keyExact].openPopup();
+      return;
     }
-    
+
     // Fallback: pencarian parsial jika tidak ada yang cocok persis
     for (const key in markers) {
       const d = dataStore[key];
       if (
         (d.fullname && d.fullname.toLowerCase().includes(val)) ||
         (d.user && d.user.toLowerCase().includes(val)) ||
-        (d.ssid && d.ssid.toLowerCase().includes(val))
+        (d.ssid && d.ssid.toLowerCase().includes(val)) ||
+        (d.odp && d.odp.toLowerCase().includes(val))
       ) {
         map.setView(markers[key].getLatLng(), 18);
         markers[key].openPopup();
@@ -193,33 +688,76 @@
     }
   }
 
-  document.getElementById('searchInput').addEventListener('input', function(e) {
-    const val = this.value;
-    Object.values(dataStore).forEach(d => {
-        if (val === d.user || val === d.fullname || val === `SSID: ${d.ssid}`) {
-            performSearch(val);
-        }
-    });
-  });
+  document.getElementById('searchInput').addEventListener('input', debounce(function(e) {
+    performSearch(e.target.value);
+  }, 180));
 
   document.getElementById('searchInput').addEventListener('keypress', function(e) {
     if (e.key === 'Enter') performSearch(this.value);
   });
 
   ref.on('child_added', snap => addOrUpdateMarker(snap.key, snap.val()));
-  ref.on('child_changed', snap => addOrUpdateMarker(snap.key, snap.val()));
+  ref.on('child_changed', snap => {
+    addOrUpdateMarker(snap.key, snap.val());
+    // Update popup ODP jika ada perubahan koneksi
+    setTimeout(() => {
+      Object.keys(odpMarkers).forEach(odpKey => {
+        const odpData = odpDataStore[odpKey];
+        if (odpData && odpMarkers[odpKey]) {
+          odpMarkers[odpKey].setPopupContent(buildOdpPopup(odpData));
+        }
+      });
+    }, 100);
+  });
   ref.on('child_removed', snap => {
     if (markers[snap.key]) {
       markers[snap.key]._currentLayer.removeLayer(markers[snap.key]);
       delete markers[snap.key];
+    }
+    if (dataStore[snap.key]) {
+      clearIndex(snap.key, dataStore[snap.key]);
       delete dataStore[snap.key];
       updateSearchSuggestions();
     }
+    // Hapus koneksi yang terkait
+    removeConnection(snap.key);
+    // Update popup ODP setelah penghapusan
+    setTimeout(() => {
+      Object.keys(odpMarkers).forEach(odpKey => {
+        const odpData = odpDataStore[odpKey];
+        if (odpData && odpMarkers[odpKey]) {
+          odpMarkers[odpKey].setPopupContent(buildOdpPopup(odpData));
+        }
+      });
+    }, 100);
+  });
+
+  odpRef.on('child_added', snap => {
+    addOrUpdateOdpMarker(snap.key, snap.val());
+    // Update semua koneksi PPPoE yang terhubung ke ODP ini
+    setTimeout(updateAllConnectionsFromODP, 50);
+  });
+  odpRef.on('child_changed', snap => {
+    addOrUpdateOdpMarker(snap.key, snap.val());
+    // Update semua koneksi PPPoE yang terhubung ke ODP ini
+    setTimeout(updateAllConnectionsFromODP, 50);
+  });
+  odpRef.on('child_removed', snap => {
+    if (odpMarkers[snap.key]) {
+      layerODP.removeLayer(odpMarkers[snap.key]);
+      delete odpMarkers[snap.key];
+      delete odpDataStore[snap.key];
+    }
+    // Update semua koneksi PPPoE
+    setTimeout(updateAllConnectionsFromODP, 50);
   });
 
   document.getElementById('fitAll').addEventListener('click', () => {
-    const latlngs = Object.values(markers).map(m => m.getLatLng());
-    if (latlngs.length > 0) map.fitBounds(L.latLngBounds(latlngs).pad(0.1));
+    const pppoeLatlngs = Object.values(markers).map(m => m.getLatLng());
+    const odpLatlngs = Object.values(odpMarkers).map(m => m.getLatLng());
+    const allLatlngs = [...pppoeLatlngs, ...odpLatlngs];
+    
+    if (allLatlngs.length > 0) map.fitBounds(L.latLngBounds(allLatlngs).pad(0.1));
   });
 
   function updateACS(id) {
@@ -238,6 +776,64 @@
       map.removeLayer(baseOSM);
     }
   });
+
+  // Clear ODP Selection
+  document.getElementById('clearOdpSelection').addEventListener('click', function() {
+    lastodp = null;
+    // Reset notifikasi ke status awal
+    const hasServiceWorker = 'serviceWorker' in navigator;
+    document.getElementById('notifBar').innerText = hasServiceWorker ? 'Ready (Offline mode enabled)' : 'Ready';
+    console.log('ODP selection cleared');
+  });
+
+  // Show Connected PPPoE
+  document.getElementById('showConnectedPPPoE').addEventListener('click', function() {
+    if (!lastodp) {
+      alert('Pilih ODP terlebih dahulu dengan mengklik marker ODP!');
+      return;
+    }
+
+    // Cari semua PPPoE yang terhubung ke ODP ini
+    const connectedPPPoE = Object.entries(dataStore).filter(([key, pppoe]) => pppoe.odp === lastodp);
+    
+    if (connectedPPPoE.length === 0) {
+      alert(`Tidak ada PPPoE yang terhubung ke ODP: ${lastodp}`);
+      return;
+    }
+
+    // Zoom ke area yang mencakup semua PPPoE terhubung
+    const latlngs = connectedPPPoE.map(([key, pppoe]) => 
+      [parseFloat(pppoe.latitude), parseFloat(pppoe.longitude)]
+    );
+    
+    if (latlngs.length > 0) {
+      map.fitBounds(L.latLngBounds(latlngs).pad(0.1));
+    }
+
+    // Buka popup untuk PPPoE pertama
+    const firstPPPoE = connectedPPPoE[0];
+    if (markers[firstPPPoE[0]]) {
+      markers[firstPPPoE[0]].openPopup();
+    }
+
+    console.log(`Menampilkan ${connectedPPPoE.length} PPPoE terhubung ke ODP: ${lastodp}`);
+    document.getElementById('notifBar').innerText = `Menampilkan ${connectedPPPoE.length} PPPoE terhubung ke ${lastodp}`;
+  });
+
+  // Register Service Worker untuk tile caching offline
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js')
+        .then(reg => {
+          console.log('[App] Service Worker registered:', reg.scope);
+          document.getElementById('notifBar').innerText = 'Ready (Offline mode enabled)';
+        })
+        .catch(err => {
+          console.error('[App] Service Worker registration failed:', err);
+          document.getElementById('notifBar').innerText = 'Ready (Offline mode unavailable)';
+        });
+    });
+  }
 </script>
 </body>
 </html>
