@@ -1937,7 +1937,7 @@
 
         <div class="popup-footer-links">
           <a href="${gmLink}" target="_blank">📍 Google Maps</a>
-          <a href="${(appSettings.genieAcsUrl || 'http://192.168.18.243/').replace(/\/+$/, '')}/devices?query=${encodeURIComponent(safeUser)}" target="_blank" style="color:#2563eb; font-weight:600;" title="Buka perangkat ini di GenieACS">🖥️ GenieACS</a>
+          <a href="javascript:void(0)" onclick="openGenieAcsDevice('${safeUser.replace(/'/g, "\\'")}')" style="color:#2563eb; font-weight:600;" title="Buka perangkat ini di GenieACS">🖥️ GenieACS</a>
           ${cleanWa ? `<a href="${waLink}" target="_blank" style="color:#16a34a; font-weight:600;">💬 WhatsApp</a>` : ''}
         </div>
       </div>
@@ -2478,21 +2478,63 @@
       });
   }
 
+  function openGenieAcsDevice(username) {
+    try {
+      const saved = localStorage.getItem('wifi_map_settings');
+      if (saved) appSettings = { ...DEFAULT_SETTINGS, ...JSON.parse(saved) };
+    } catch (e) {}
+    const base = (appSettings.genieAcsUrl || DEFAULT_SETTINGS.genieAcsUrl).replace(/\/+$/, '');
+    window.open(`${base}/devices?query=${encodeURIComponent(username)}`, '_blank');
+  }
+
   function updateACS(id) {
+    // Always refresh latest appSettings from localStorage
+    try {
+      const saved = localStorage.getItem('wifi_map_settings');
+      if (saved) appSettings = { ...DEFAULT_SETTINGS, ...JSON.parse(saved) };
+    } catch (e) {}
+
     const mode = appSettings.acsTriggerMode || DEFAULT_SETTINGS.acsTriggerMode;
+
     if (mode === 'webhook_custom') {
-      showNotification(`Memproses webhook ACS untuk ${id}...`, '⏳');
       const webhookSetting = appSettings.genieAcsWebhook || DEFAULT_SETTINGS.genieAcsWebhook;
       const endpoint = webhookSetting.endsWith('=')
         ? `${webhookSetting}${encodeURIComponent(id)}`
         : `${webhookSetting.replace(/\/+$/, '')}/webhook/production/?devid=${encodeURIComponent(id)}`;
 
+      showNotification(`Mengirim ke Webhook ACS: ${endpoint}...`, '⏳');
+
       fetch(endpoint)
-        .then(() => showNotification(`Update ACS webhook terkirim untuk: ${id}`, '✅'))
-        .catch(() => showNotification(`Gagal terhubung ke webhook ACS. Periksa URL di Pengaturan.`, '⚠️'));
+        .then(() => showNotification(`Update ACS berhasil dikirim ke webhook: ${endpoint}`, '✅'))
+        .catch(err => {
+          console.warn('Webhook ACS error:', err);
+          showNotification(`Gagal terhubung ke webhook (${endpoint}). Periksa URL di Pengaturan.`, '⚠️');
+        });
     } else {
-      // Open the official GenieACS NBI controller modal
-      openGenieAcsModal(id);
+      // Direct REST API (NBI Port 7557) according to GenieACS API Reference
+      const nbiHost = (appSettings.genieAcsNbiUrl || DEFAULT_SETTINGS.genieAcsNbiUrl).replace(/\/+$/, '');
+      const taskEndpoint = `${nbiHost}/devices/${encodeURIComponent(id)}/tasks?connection_request`;
+
+      showNotification(`Mengirim refresh ke GenieACS: ${taskEndpoint}...`, '⏳');
+
+      fetch(taskEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'refreshObject', objectName: '' })
+      })
+      .then(async (res) => {
+        if (res.ok || res.status === 200 || res.status === 202) {
+          showNotification(`Update ACS BERHASIL [${res.status}] untuk: ${id} di ${nbiHost}`, '✅');
+        } else {
+          showNotification(`GenieACS (${nbiHost}) respons status ${res.status}. Membuka panel kontrol...`, 'ℹ️');
+          openGenieAcsModal(id);
+        }
+      })
+      .catch(err => {
+        console.warn('GenieACS REST 7557 error:', err);
+        showNotification(`Gagal terhubung ke ${nbiHost}. Membuka panel kontrol ACS...`, '⚠️');
+        openGenieAcsModal(id);
+      });
     }
   }
 
@@ -2502,6 +2544,11 @@
   const settingsModal = document.getElementById('settingsModal');
 
   function openSettingsModal() {
+    try {
+      const saved = localStorage.getItem('wifi_map_settings');
+      if (saved) appSettings = { ...DEFAULT_SETTINGS, ...JSON.parse(saved) };
+    } catch (e) {}
+
     document.getElementById('settingAcsMode').value = appSettings.acsTriggerMode || DEFAULT_SETTINGS.acsTriggerMode;
     document.getElementById('settingGenieAcsNbi').value = appSettings.genieAcsNbiUrl || DEFAULT_SETTINGS.genieAcsNbiUrl;
     document.getElementById('settingGenieAcsUrl').value = appSettings.genieAcsUrl || DEFAULT_SETTINGS.genieAcsUrl;
@@ -2570,6 +2617,14 @@
     // Redraw connections with updated line width
     updateAllConnectionsFromODP();
 
+    // Re-bind all popups on the map so that all links immediately use the new settings!
+    Object.entries(markers).forEach(([key, marker]) => {
+      const item = dataStore[key];
+      if (item && marker) {
+        marker.setPopupContent(buildPopup(item));
+      }
+    });
+
     // Update UI references
     updateGenieAcsUI();
 
@@ -2607,6 +2662,21 @@
   document.getElementById('btnCancelSettings').addEventListener('click', closeSettingsModal);
   document.getElementById('btnSaveSettings').addEventListener('click', saveSettings);
   document.getElementById('btnResetSettings').addEventListener('click', resetSettings);
+
+  const inputGuiUrl = document.getElementById('settingGenieAcsUrl');
+  if (inputGuiUrl) {
+    inputGuiUrl.addEventListener('input', (e) => {
+      const val = e.target.value.trim();
+      const hostMatch = val.match(/https?:\/\/([^/:]+)/);
+      if (hostMatch && hostMatch[1]) {
+        const host = hostMatch[1];
+        const inputNbi = document.getElementById('settingGenieAcsNbi');
+        const inputWh = document.getElementById('settingGenieAcsWebhook');
+        if (inputNbi) inputNbi.value = `http://${host}:7557`;
+        if (inputWh) inputWh.value = `http://${host}:5678/webhook/production/?devid=`;
+      }
+    });
+  }
 
   // Event Listeners for GenieACS NBI Controller Modal (docs.genieacs.com)
   document.getElementById('btnCloseAcsModal').addEventListener('click', closeGenieAcsModal);
