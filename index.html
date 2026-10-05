@@ -987,6 +987,11 @@
             <input type="text" id="settingGenieAcsWebhook" placeholder="http://192.168.18.243:5678/webhook/production/?devid=" />
             <small style="font-size:10px; color:#64748b;">Digunakan bila memakai alur webhook khusus seperti n8n</small>
           </div>
+          <div style="margin-top:8px; padding-top:6px; border-top:1px dashed #cbd5e1;">
+            <a href="https://docs.genieacs.com/en/latest/api-reference.html" target="_blank" style="font-size:11px; color:#2563eb; text-decoration:none; display:inline-flex; align-items:center; gap:4px; font-weight:600;">
+              📖 Dokumentasi Resmi GenieACS API Reference ↗
+            </a>
+          </div>
         </div>
 
         <!-- Group 2: Tile Map & Titik Tengah -->
@@ -1045,6 +1050,76 @@
           <button type="button" class="ui-btn" id="btnCancelSettings" style="width:auto;">Batal</button>
           <button type="button" class="ui-btn ui-btn-primary" id="btnSaveSettings" style="width:auto;">💾 Simpan</button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- GenieACS NBI Action Modal (docs.genieacs.com/en/latest/api-reference.html) -->
+  <div class="modal-backdrop" id="genieAcsModal">
+    <div class="modal-box" style="max-width: 480px; max-height: 90vh; display: flex; flex-direction: column;">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px; border-bottom:1px solid #e2e8f0; padding-bottom:8px;">
+        <div>
+          <h3 style="margin:0; font-size:15px; color:#0f172a; font-weight:700;">⚡ GenieACS NBI Controller (Port 7557)</h3>
+          <p id="acsModalSubtitle" style="margin:2px 0 0; font-size:11px; color:#64748b;">Perangkat Pelanggan PPPoE</p>
+        </div>
+        <button type="button" class="btn-close-sidebar" id="btnCloseAcsModal" style="background:#f1f5f9; color:#475569;" title="Tutup">✕</button>
+      </div>
+
+      <div style="overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:10px; padding-right:2px;">
+        <!-- Card Data Klien -->
+        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:10px; font-size:12px;">
+          <div style="display:grid; grid-template-columns: 95px 1fr; row-gap:4px;">
+            <span style="color:#64748b; font-weight:600;">Username:</span>
+            <span id="acsModalUser" style="font-weight:700; color:#0f172a;">-</span>
+            <span style="color:#64748b; font-weight:600;">IP Address:</span>
+            <span id="acsModalIp">-</span>
+            <span style="color:#64748b; font-weight:600;">Device ID NBI:</span>
+            <span id="acsModalDeviceId" style="font-family:monospace; color:#2563eb; font-size:11px; word-break:break-all;">(Auto Detect)</span>
+          </div>
+        </div>
+
+        <!-- Task Buttons according to docs.genieacs.com -->
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          <button type="button" class="ui-btn ui-btn-primary" id="btnAcsRefresh" style="justify-content:flex-start; gap:8px; padding:9px 12px;">
+            <span style="font-size:16px;">🔄</span>
+            <div style="text-align:left;">
+              <div style="font-weight:700;">Kirim Connection Request (refreshObject)</div>
+              <div style="font-size:10px; opacity:0.85;">POST /devices/{id}/tasks?connection_request</div>
+            </div>
+          </button>
+
+          <button type="button" class="ui-btn" id="btnAcsQuery" style="justify-content:flex-start; gap:8px; padding:9px 12px; background:#f0fdf4; color:#15803d; border-color:#bbf7d0;">
+            <span style="font-size:16px;">📡</span>
+            <div style="text-align:left;">
+              <div style="font-weight:700;">Query Status &amp; Parameter ONT</div>
+              <div style="font-size:10px; opacity:0.85;">GET /devices/?query={"_id":"..."}</div>
+            </div>
+          </button>
+
+          <button type="button" class="ui-btn" id="btnAcsReboot" style="justify-content:flex-start; gap:8px; padding:9px 12px; background:#fff1f2; color:#e11d48; border-color:#fecdd3;">
+            <span style="font-size:16px;">🔌</span>
+            <div style="text-align:left;">
+              <div style="font-weight:700;">Reboot Modem ONT (reboot)</div>
+              <div style="font-size:10px; opacity:0.85;">POST /devices/{id}/tasks?connection_request {"name":"reboot"}</div>
+            </div>
+          </button>
+        </div>
+
+        <!-- Realtime Output Console Box -->
+        <div style="margin-top:2px;">
+          <div style="font-size:10px; font-weight:700; color:#64748b; text-transform:uppercase; margin-bottom:4px; display:flex; justify-content:space-between;">
+            <span>Log Respons API NBI</span>
+            <a href="https://docs.genieacs.com/en/latest/api-reference.html" target="_blank" style="color:#2563eb; text-decoration:none;">Docs API ↗</a>
+          </div>
+          <pre id="acsResponseLog" style="background:#0f172a; color:#38bdf8; font-family:monospace; font-size:11px; padding:8px 10px; border-radius:6px; margin:0; max-height:130px; overflow-y:auto; white-space:pre-wrap; word-break:break-all;">Klik salah satu aksi di atas untuk mengirim perintah ke GenieACS NBI.</pre>
+        </div>
+      </div>
+
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; padding-top:8px; border-top:1px solid #e2e8f0;">
+        <a id="acsModalWebLink" href="http://192.168.18.243/" target="_blank" style="font-size:11px; color:#2563eb; text-decoration:none; font-weight:600;">
+          🌐 Buka di Web GUI GenieACS ↗
+        </a>
+        <button type="button" class="ui-btn" id="btnCloseAcsModalBottom" style="width:auto; padding:6px 14px;">Tutup</button>
       </div>
     </div>
   </div>
@@ -2255,42 +2330,169 @@
     closeSidebar();
   });
 
-  function updateACS(id) {
-    showNotification(`Memproses update ACS untuk ${id}...`, '⏳');
+  /**
+   * GenieACS NBI API Controller (docs.genieacs.com/en/latest/api-reference.html)
+   */
+  let currentAcsUser = null;
+  let detectedDeviceId = null;
+  const genieAcsModal = document.getElementById('genieAcsModal');
+  const acsResponseLog = document.getElementById('acsResponseLog');
 
-    const mode = appSettings.acsTriggerMode || DEFAULT_SETTINGS.acsTriggerMode;
+  function logAcsResponse(msg, isSuccess = true) {
+    if (!acsResponseLog) return;
+    const timeStr = new Date().toLocaleTimeString();
+    acsResponseLog.innerText = `[${timeStr}] ${msg}`;
+    acsResponseLog.style.color = isSuccess ? '#38bdf8' : '#f87171';
+  }
 
-    if (mode === 'rest_7557') {
-      // GenieACS Direct REST API (NBI) on Port 7557
-      const nbiBase = (appSettings.genieAcsNbiUrl || DEFAULT_SETTINGS.genieAcsNbiUrl).replace(/\/+$/, '');
-      const taskEndpoint = `${nbiBase}/devices/${encodeURIComponent(id)}/tasks?connection_request`;
+  function openGenieAcsModal(id) {
+    currentAcsUser = id;
+    detectedDeviceId = id;
 
-      fetch(taskEndpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: 'refreshObject', objectName: '' })
-      })
-      .then(res => {
-        if (res.ok || res.status === 200 || res.status === 202) {
-          showNotification(`Task refresh GenieACS (Port 7557) terkirim untuk: ${id}`, '✅');
+    const modalUser = document.getElementById('acsModalUser');
+    const modalSubtitle = document.getElementById('acsModalSubtitle');
+    const modalIp = document.getElementById('acsModalIp');
+    const modalDeviceId = document.getElementById('acsModalDeviceId');
+    const webLink = document.getElementById('acsModalWebLink');
+
+    const pppoeItem = Object.values(dataStore).find(p => p.user === id) || {};
+
+    if (modalUser) modalUser.innerText = id || '-';
+    if (modalSubtitle) modalSubtitle.innerText = `${pppoeItem.fullname || 'Klien PPPoE'} (${pppoeItem.profile || 'ONT'})`;
+    if (modalIp) modalIp.innerText = pppoeItem.address || '-';
+    if (modalDeviceId) modalDeviceId.innerText = id;
+    if (webLink) webLink.href = `${(appSettings.genieAcsUrl || DEFAULT_SETTINGS.genieAcsUrl).replace(/\/+$/, '')}/devices?query=${encodeURIComponent(id)}`;
+
+    logAcsResponse(`Siap mengontrol perangkat: ${id}\nAPI Host: ${appSettings.genieAcsNbiUrl || DEFAULT_SETTINGS.genieAcsNbiUrl}`);
+    genieAcsModal.style.display = 'flex';
+
+    // Auto query NBI to verify if device ID exists or needs resolution
+    queryGenieAcsDevice(id, false);
+  }
+
+  function closeGenieAcsModal() {
+    genieAcsModal.style.display = 'none';
+  }
+
+  // Official GenieACS Task Sender (POST /devices/<device_id>/tasks?[connection_request])
+  function sendGenieAcsTask(taskObject, actionLabel) {
+    const targetId = detectedDeviceId || currentAcsUser;
+    if (!targetId) {
+      logAcsResponse('Error: ID perangkat tidak ditemukan!', false);
+      return;
+    }
+
+    logAcsResponse(`Mengirim ${actionLabel} ke GenieACS NBI...\nPOST /devices/${encodeURIComponent(targetId)}/tasks?connection_request\nBody: ${JSON.stringify(taskObject)}`);
+
+    const nbiHost = (appSettings.genieAcsNbiUrl || DEFAULT_SETTINGS.genieAcsNbiUrl).replace(/\/+$/, '');
+    const taskEndpoint = `${nbiHost}/devices/${encodeURIComponent(targetId)}/tasks?connection_request`;
+
+    fetch(taskEndpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(taskObject)
+    })
+    .then(async (res) => {
+      const statusText = `HTTP ${res.status} ${res.statusText}`;
+      let responseBody = '';
+      try {
+        const json = await res.json();
+        responseBody = JSON.stringify(json, null, 2);
+      } catch (e) {
+        responseBody = await res.text();
+      }
+
+      if (res.ok || res.status === 200 || res.status === 202) {
+        const msg = `${statusText} - Sukses!\n${actionLabel} berhasil diproses oleh GenieACS.\nTask Object:\n${responseBody}`;
+        logAcsResponse(msg, true);
+        showNotification(`${actionLabel} berhasil dikirim!`, '✅');
+      } else {
+        const msg = `${statusText} - Gagal.\nRespon server:\n${responseBody}`;
+        logAcsResponse(msg, false);
+        showNotification(`GenieACS merespons status ${res.status}`, '⚠️');
+      }
+    })
+    .catch(err => {
+      console.warn('GenieACS Task Error:', err);
+      logAcsResponse(`Gagal terhubung ke REST API Port 7557 (${nbiHost}).\nError: ${err.message}\nPastikan NBI aktif dan diizinkan di jaringan.`, false);
+      showNotification(`Gagal terhubung ke REST Port 7557`, '⚠️');
+    });
+  }
+
+  // Official GenieACS Device Query (GET /devices/?query={...})
+  function queryGenieAcsDevice(queryParam, isUserInitiated = true) {
+    const nbiHost = (appSettings.genieAcsNbiUrl || DEFAULT_SETTINGS.genieAcsNbiUrl).replace(/\/+$/, '');
+    
+    // Query by ID or standard TR-069 PPPoE username fields
+    const queryObj = {
+      "$or": [
+        { "_id": queryParam },
+        { "VirtualParameters.pppoeUsername": queryParam },
+        { "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1.Username": queryParam }
+      ]
+    };
+
+    const queryUrl = `${nbiHost}/devices/?query=${encodeURIComponent(JSON.stringify(queryObj))}`;
+
+    if (isUserInitiated) {
+      logAcsResponse(`Mengambil status perangkat dari GenieACS...\nGET /devices/?query=${JSON.stringify(queryObj)}`);
+    }
+
+    fetch(queryUrl)
+      .then(res => res.json())
+      .then(devices => {
+        if (devices && devices.length > 0) {
+          const dev = devices[0];
+          detectedDeviceId = dev._id;
+          const devEl = document.getElementById('acsModalDeviceId');
+          if (devEl) devEl.innerText = dev._id;
+
+          if (isUserInitiated) {
+            const rxPower = dev.VirtualParameters?.rxPower || dev.InternetGatewayDevice?.WANDevice?.['1']?.WANOponDevice?.OpticalSignalLevel || 'N/A';
+            const uptime = dev.VirtualParameters?.uptime || dev.InternetGatewayDevice?.DeviceInfo?.UpTime || 'N/A';
+            const model = dev.DeviceID?.ProductClass || dev.InternetGatewayDevice?.DeviceInfo?.ModelName || 'ONT';
+            const sn = dev.DeviceID?.SerialNumber || dev._id;
+
+            logAcsResponse(
+              `Perangkat Ditemukan (GenieACS NBI):\n` +
+              `• Device ID: ${dev._id}\n` +
+              `• Model: ${model}\n` +
+              `• Serial: ${sn}\n` +
+              `• Rx Power: ${rxPower} dBm\n` +
+              `• Uptime: ${uptime}\n` +
+              `• Status: Online & Terdaftar di ACS`,
+              true
+            );
+            showNotification(`Data perangkat ${dev._id} dimuat!`, '📡');
+          }
         } else {
-          showNotification(`GenieACS REST (7557) merespons status ${res.status}. Pastikan ID perangkat sesuai.`, 'ℹ️');
+          if (isUserInitiated) {
+            logAcsResponse(`Query selesai: Tidak ada perangkat di GenieACS dengan username "${queryParam}".`, false);
+          }
         }
       })
       .catch(err => {
-        console.warn('GenieACS REST 7557 fetch error:', err);
-        showNotification(`Gagal terhubung ke REST API Port 7557 (${nbiBase}). Pastikan GenieACS NBI aktif di LAN/VPN.`, '⚠️');
+        if (isUserInitiated) {
+          logAcsResponse(`Query NBI gagal: ${err.message}`, false);
+        }
       });
-    } else {
-      // Custom Webhook (e.g. n8n or middleware port 5678)
+  }
+
+  function updateACS(id) {
+    const mode = appSettings.acsTriggerMode || DEFAULT_SETTINGS.acsTriggerMode;
+    if (mode === 'webhook_custom') {
+      showNotification(`Memproses webhook ACS untuk ${id}...`, '⏳');
       const webhookSetting = appSettings.genieAcsWebhook || DEFAULT_SETTINGS.genieAcsWebhook;
       const endpoint = webhookSetting.endsWith('=')
         ? `${webhookSetting}${encodeURIComponent(id)}`
         : `${webhookSetting.replace(/\/+$/, '')}/webhook/production/?devid=${encodeURIComponent(id)}`;
 
       fetch(endpoint)
-        .then(() => showNotification(`Update ACS webhook berhasil dikirim untuk: ${id}`, '✅'))
+        .then(() => showNotification(`Update ACS webhook terkirim untuk: ${id}`, '✅'))
         .catch(() => showNotification(`Gagal terhubung ke webhook ACS. Periksa URL di Pengaturan.`, '⚠️'));
+    } else {
+      // Open the official GenieACS NBI controller modal
+      openGenieAcsModal(id);
     }
   }
 
@@ -2405,6 +2607,30 @@
   document.getElementById('btnCancelSettings').addEventListener('click', closeSettingsModal);
   document.getElementById('btnSaveSettings').addEventListener('click', saveSettings);
   document.getElementById('btnResetSettings').addEventListener('click', resetSettings);
+
+  // Event Listeners for GenieACS NBI Controller Modal (docs.genieacs.com)
+  document.getElementById('btnCloseAcsModal').addEventListener('click', closeGenieAcsModal);
+  document.getElementById('btnCloseAcsModalBottom').addEventListener('click', closeGenieAcsModal);
+  
+  document.getElementById('btnAcsRefresh').addEventListener('click', () => {
+    sendGenieAcsTask({ name: 'refreshObject', objectName: '' }, 'Connection Request (refreshObject)');
+  });
+
+  document.getElementById('btnAcsReboot').addEventListener('click', () => {
+    showConfirmModal(
+      'Reboot ONT',
+      `Yakin ingin mereboot modem ONT untuk pelanggan "${currentAcsUser}"? Perangkat akan offline sementara selama restart.`,
+      () => {
+        sendGenieAcsTask({ name: 'reboot' }, 'Reboot ONT');
+      },
+      'Ya, Reboot ONT',
+      true
+    );
+  });
+
+  document.getElementById('btnAcsQuery').addEventListener('click', () => {
+    queryGenieAcsDevice(detectedDeviceId || currentAcsUser, true);
+  });
 
   // Initialize UI with settings
   updateGenieAcsUI();
