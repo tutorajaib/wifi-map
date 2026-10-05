@@ -4,118 +4,1232 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>PPPoE Live Monitor — Advanced Search</title>
+  <meta name="description" content="Interactive PPPoE live monitor and fiber ODP network map with search, clustering, export, and real-time status tracking." />
+  <meta property="og:title" content="PPPoE Live Monitor — Advanced Search" />
+  <meta property="og:description" content="Interactive PPPoE live monitor and fiber ODP network map with search, clustering, export, and real-time status tracking." />
+  
+  <!-- Leaflet CSS & JS -->
   <link 
     rel="stylesheet" 
     href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" 
     crossorigin="anonymous" 
   />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin="anonymous"></script>
+
+  <!-- Leaflet MarkerCluster CSS & JS -->
+  <link 
+    rel="stylesheet" 
+    href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" 
+    crossorigin="anonymous" 
+  />
+  <link 
+    rel="stylesheet" 
+    href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" 
+    crossorigin="anonymous" 
+  />
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js" crossorigin="anonymous"></script>
+
+  <!-- Firebase Compat SDK -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js" crossorigin="anonymous"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js" crossorigin="anonymous"></script>
+
   <style>
-    body{margin:0;font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial;background:#f4f4f4}
-    #map{height:100vh;z-index: 1;}
-    
-    .controls-wrapper {
-      position: absolute; left: 10px; top: 10px; z-index: 1000;
-      display: flex; flex-direction: column; gap: 8px; width: 300px;
+    :root {
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --success: #16a34a;
+      --danger: #dc2626;
+      --warning: #f59e0b;
+      --indigo: #6366f1;
+      --slate-800: #1e293b;
+      --slate-900: #0f172a;
+      --border: #e2e8f0;
+      --shadow-sm: 0 2px 8px rgba(15, 23, 42, 0.08);
+      --shadow: 0 4px 20px rgba(15, 23, 42, 0.15);
+      --radius: 12px;
+      --sidebar-width: 350px;
     }
 
-    .top-controls { display: flex; gap: 5px; }
-    .top-controls select, .top-controls button {
-      padding: 8px; border-radius: 6px; border: 1px solid #ccc; 
-      background: #fff; cursor: pointer; font-size: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+      background: #0f172a;
+      color: #334155;
+      overflow: hidden;
+    }
+
+    #map {
+      height: 100vh;
+      width: 100vw;
+      z-index: 1;
+    }
+
+    /* Floating Panel Controls */
+    .controls-panel {
+      position: absolute;
+      left: 14px;
+      top: 14px;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      width: 340px;
+      max-width: calc(100vw - 28px);
+      pointer-events: none;
+    }
+
+    .glass-card {
+      pointer-events: auto;
+      background: rgba(255, 255, 255, 0.96);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-radius: var(--radius);
+      border: 1px solid rgba(255, 255, 255, 0.8);
+      box-shadow: var(--shadow);
+      padding: 10px 12px;
+    }
+
+    .top-actions-bar {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .btn-menu-toggle {
+      background: var(--primary);
+      color: #ffffff;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      box-shadow: 0 2px 6px rgba(37, 99, 235, 0.3);
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+    .btn-menu-toggle:hover {
+      background: var(--primary-hover);
+    }
+
+    .ui-select, .ui-btn {
+      padding: 8px 10px;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: #ffffff;
+      color: #1e293b;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+
+    .ui-select:hover, .ui-btn:hover {
+      background: #f1f5f9;
+      border-color: #cbd5e1;
+    }
+
+    .ui-btn-primary {
+      background: var(--primary);
+      color: #ffffff;
+      border-color: var(--primary);
+    }
+    .ui-btn-primary:hover {
+      background: var(--primary-hover);
+    }
+
+    .ui-btn-danger {
+      background: #fee2e2;
+      color: var(--danger);
+      border-color: #fecaca;
+    }
+    .ui-btn-danger:hover {
+      background: #fecaca;
+    }
+
+    .ui-btn-success {
+      background: #dcfce7;
+      color: #15803d;
+      border-color: #bbf7d0;
+    }
+    .ui-btn-success:hover {
+      background: #bbf7d0;
+    }
+
+    /* Search Bar */
+    .search-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 12px;
+      color: #94a3b8;
+      pointer-events: none;
+      font-size: 14px;
     }
 
     .search-box {
-      width: 100%; padding: 12px; border-radius: 8px; border: 2px solid #007bff;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.15); font-size: 14px; outline: none; box-sizing: border-box;
+      width: 100%;
+      padding: 10px 32px 10px 34px;
+      border-radius: 8px;
+      border: 1.5px solid #cbd5e1;
+      font-size: 13px;
+      background: #ffffff;
+      color: #0f172a;
+      transition: all 0.2s;
     }
 
+    .search-box:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
+    }
+
+    .clear-search-btn {
+      position: absolute;
+      right: 10px;
+      background: none;
+      border: none;
+      color: #94a3b8;
+      cursor: pointer;
+      font-size: 14px;
+      padding: 2px 4px;
+      display: none;
+    }
+    .clear-search-btn:hover { color: #475569; }
+
+    /* Stats Pill Bar */
+    .stats-bar {
+      display: flex;
+      justify-content: space-between;
+      gap: 6px;
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid #f1f5f9;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .stat-badge {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      background: #f8fafc;
+      padding: 3px 6px;
+      border-radius: 6px;
+      color: #475569;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .stat-badge:hover {
+      background: #e2e8f0;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .dot-online { background: #16a34a; }
+    .dot-offline { background: #ef4444; }
+    .dot-odp { background: #6366f1; }
+
+    /* Toast Notification Bar */
     .notif-bar {
-      position: absolute; right: 50px; top: 10px; z-index: 1000;
-      background: rgba(255,255,255,0.95); padding: 10px 15px;
-      border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-      border-left: 4px solid #007bff; font-weight: 500;
+      position: absolute;
+      right: 14px;
+      top: 14px;
+      z-index: 1000;
+      background: rgba(15, 23, 42, 0.92);
+      color: #ffffff;
+      padding: 9px 15px;
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      font-size: 12px;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      max-width: 400px;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border-left: 4px solid var(--primary);
+      transition: all 0.3s ease;
+      animation: fadeIn 0.2s ease-out;
     }
 
-    .marker-online { background:#16a34a; border-radius:50%; width:12px; height:12px; display:inline-block; border:2px solid white; }
-    .marker-offline { background:#ef4444; border-radius:50%; width:12px; height:12px; display:inline-block; border:2px solid white; }
-    .marker-odp { background:#6366f1; border-radius:50%; width:12px; height:12px; display:inline-block; border:2px solid white; }
-    
-    .popup-label { color: #666; font-weight: bold; margin-right: 4px; }
-    .btn-update { background: #007bff; color: white; border: none; padding: 8px; border-radius: 4px; cursor: pointer; width: 100%; margin: 8px 0; font-weight: bold; }
-    .btn-update:hover { background: #0056b3; }
-    .btn-update:disabled { background: #ccc; cursor: not-allowed; }
-    
-    /* Edit form styles */
-    .edit-input {
-      width: 100%; 
-      padding: 4px 6px; 
-      border: 1px solid #ccc; 
-      border-radius: 3px; 
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Markers */
+    .marker-online {
+      background: #16a34a;
+      border-radius: 50%;
+      width: 12px;
+      height: 12px;
+      display: block;
+      border: 2px solid #ffffff;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+    }
+
+    .marker-offline {
+      background: #ef4444;
+      border-radius: 50%;
+      width: 12px;
+      height: 12px;
+      display: block;
+      border: 2px solid #ffffff;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+    }
+
+    .marker-odp {
+      background: #6366f1;
+      border-radius: 4px;
+      width: 14px;
+      height: 14px;
+      display: block;
+      border: 2px solid #ffffff;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+    }
+
+    /* Custom Leaflet Cluster Badges */
+    .marker-cluster-small {
+      background-color: rgba(37, 99, 235, 0.3) !important;
+    }
+    .marker-cluster-small div {
+      background-color: rgba(37, 99, 235, 0.9) !important;
+      color: #fff !important;
+      font-weight: 700;
+    }
+    .marker-cluster-medium {
+      background-color: rgba(16, 185, 129, 0.3) !important;
+    }
+    .marker-cluster-medium div {
+      background-color: rgba(16, 185, 129, 0.9) !important;
+      color: #fff !important;
+      font-weight: 700;
+    }
+    .marker-cluster-large {
+      background-color: rgba(99, 102, 241, 0.3) !important;
+    }
+    .marker-cluster-large div {
+      background-color: rgba(99, 102, 241, 0.9) !important;
+      color: #fff !important;
+      font-weight: 700;
+    }
+
+    /* Sidebar Drawer */
+    .sidebar-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.45);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      z-index: 1500;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease;
+    }
+    .sidebar-overlay.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .sidebar-drawer {
+      position: fixed;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      width: var(--sidebar-width);
+      max-width: 88vw;
+      background: #ffffff;
+      z-index: 1600;
+      box-shadow: 4px 0 24px rgba(0, 0, 0, 0.2);
+      transform: translateX(-100%);
+      transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .sidebar-drawer.active {
+      transform: translateX(0);
+    }
+
+    .sidebar-header {
+      padding: 16px;
+      background: #0f172a;
+      color: #ffffff;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .sidebar-header-info h3 {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .sidebar-header-info p {
+      margin: 2px 0 0 0;
+      font-size: 11px;
+      color: #94a3b8;
+    }
+
+    .btn-close-sidebar {
+      background: rgba(255, 255, 255, 0.1);
+      border: none;
+      color: #ffffff;
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      font-size: 16px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s;
+    }
+    .btn-close-sidebar:hover {
+      background: rgba(255, 255, 255, 0.25);
+    }
+
+    .sidebar-content {
+      padding: 16px;
+      overflow-y: auto;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .sidebar-section-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: #64748b;
+      margin: 0 0 8px 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .stat-cards-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .stat-card {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 10px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .stat-card:hover {
+      border-color: #cbd5e1;
+      background: #f1f5f9;
+      transform: translateY(-1px);
+    }
+    .stat-card.active {
+      border-color: var(--primary);
+      background: #eff6ff;
+    }
+    .stat-card-title {
+      font-size: 11px;
+      color: #64748b;
+      font-weight: 600;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .stat-card-value {
+      font-size: 18px;
+      font-weight: 800;
+      color: #0f172a;
+    }
+
+    /* Filter Segmented Control */
+    .filter-pills {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      background: #f1f5f9;
+      padding: 3px;
+      border-radius: 8px;
+      gap: 2px;
+    }
+    .filter-pill-btn {
+      background: transparent;
+      border: none;
+      padding: 6px 4px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #64748b;
+      border-radius: 6px;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.15s;
+    }
+    .filter-pill-btn.active {
+      background: #ffffff;
+      color: #0f172a;
+      box-shadow: var(--shadow-sm);
+    }
+
+    /* Export Box */
+    .export-buttons-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .btn-export {
+      width: 100%;
+      padding: 10px 14px;
+      border-radius: 8px;
       font-size: 12px;
-      margin-bottom: 2px;
+      font-weight: 600;
+      border: 1px solid var(--border);
+      background: #ffffff;
+      color: #1e293b;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      transition: all 0.15s;
     }
-    .edit-input:focus { 
-      border-color: #007bff; 
-      outline: none; 
-      box-shadow: 0 0 3px rgba(0,123,255,0.3);
+    .btn-export:hover {
+      background: #f8fafc;
+      border-color: #cbd5e1;
+      box-shadow: var(--shadow-sm);
     }
-    .edit-label {
-      display: block; 
-      font-weight: bold; 
-      margin-bottom: 2px;
+    .btn-export-badge {
+      font-size: 10px;
+      font-weight: 700;
+      background: #e2e8f0;
+      color: #475569;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    /* ODP Quick List */
+    .odp-select-wrapper select {
+      width: 100%;
+      padding: 9px 10px;
+      font-size: 12px;
+      border-radius: 8px;
+      border: 1.5px solid var(--border);
+      background: #ffffff;
+      color: #1e293b;
+      cursor: pointer;
+    }
+    .odp-select-wrapper select:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+
+    /* Leaflet Popup Cards */
+    .leaflet-popup-content-wrapper {
+      border-radius: 12px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+      padding: 4px;
+    }
+
+    .leaflet-popup-content {
+      margin: 12px 14px;
+      line-height: 1.5;
+    }
+
+    .popup-card {
+      font-size: 12px;
+      color: #334155;
+      min-width: 240px;
+      max-width: 290px;
+    }
+
+    .popup-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 8px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .popup-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #0f172a;
+      margin: 0;
+      word-break: break-word;
+    }
+
+    .status-pill {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 20px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .status-pill.online { background: #dcfce7; color: #15803d; }
+    .status-pill.offline { background: #fee2e2; color: #b91c1c; }
+    .status-pill.odp { background: #e0e7ff; color: #4338ca; }
+
+    .popup-info-grid {
+      display: grid;
+      grid-template-columns: 80px 1fr;
+      row-gap: 4px;
+      column-gap: 6px;
+      margin-bottom: 10px;
+      font-size: 12px;
+    }
+
+    .info-label {
+      color: #64748b;
+      font-weight: 600;
+    }
+
+    .info-val {
+      color: #1e293b;
+      word-break: break-all;
+    }
+
+    .info-val a {
+      color: var(--primary);
+      text-decoration: none;
+    }
+    .info-val a:hover {
+      text-decoration: underline;
+    }
+
+    .popup-buttons {
+      display: flex;
+      gap: 5px;
+      margin-top: 10px;
+    }
+
+    .popup-btn {
+      flex: 1;
+      padding: 6px 8px;
+      font-size: 11px;
+      font-weight: 600;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      text-align: center;
+      transition: opacity 0.15s;
+    }
+    .popup-btn:hover { opacity: 0.9; }
+
+    .popup-btn-edit { background: #10b981; color: #fff; }
+    .popup-btn-acs { background: #2563eb; color: #fff; }
+    .popup-btn-del { background: #ef4444; color: #fff; flex: 0.8; }
+
+    .popup-footer-links {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid #f1f5f9;
       font-size: 11px;
     }
 
+    .popup-footer-links a {
+      color: #475569;
+      text-decoration: none;
+      font-weight: 500;
+    }
+    .popup-footer-links a:hover {
+      color: var(--primary);
+    }
+
+    /* Edit Form Styles */
+    .edit-form-group {
+      margin-bottom: 6px;
+    }
+    .edit-form-group label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      color: #475569;
+      margin-bottom: 2px;
+    }
+    .edit-form-group input {
+      width: 100%;
+      padding: 5px 8px;
+      font-size: 12px;
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+      outline: none;
+    }
+    .edit-form-group input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 2px rgba(37,99,235,0.15);
+    }
+
+    /* Custom In-App Modal Dialog */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.6);
+      backdrop-filter: blur(4px);
+      z-index: 2000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    .modal-box {
+      background: #ffffff;
+      border-radius: 12px;
+      max-width: 360px;
+      width: 100%;
+      padding: 18px;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2);
+      animation: modalPop 0.2s ease-out;
+    }
+    @keyframes modalPop {
+      from { transform: scale(0.95); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+    .modal-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: #0f172a;
+      margin: 0 0 8px 0;
+    }
+    .modal-message {
+      font-size: 13px;
+      color: #475569;
+      line-height: 1.5;
+      margin-bottom: 16px;
+      white-space: pre-line;
+    }
+    .modal-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+
+    @media (max-width: 640px) {
+      .controls-panel {
+        top: 10px; left: 10px; right: 10px; width: auto;
+      }
+      .notif-bar {
+        left: 10px; right: 10px; top: auto; bottom: 10px; max-width: none;
+      }
+    }
   </style>
 </head>
 <body>
 
-  <div class="controls-wrapper">
-    <div class="top-controls">
-      <select id="basemapSelect">
-        <option value="osm">OpenStreetMap</option>
-        <option value="sat">Esri Satellite</option>
-      </select>
-      <button id="fitAll">Fit Semua</button>
-      <button id="showConnectedPPPoE" title="Tampilkan PPPoE terhubung ke ODP">🔗 PPPoE</button>
-      <button id="clearOdpSelection" title="Clear ODP Selection">❌ ODP</button>
+  <!-- Floating Main Control Bar -->
+  <div class="controls-panel">
+    <div class="glass-card">
+      <div class="top-actions-bar">
+        <button id="btnOpenSidebar" class="btn-menu-toggle" title="Buka Menu & Fitur Lengkap">
+          ☰ Menu
+        </button>
+        <button id="fitAll" class="ui-btn" style="flex:1;" title="Fokuskan seluruh titik jaringan">
+          🔍 Fit Semua
+        </button>
+        <button id="showConnectedPPPoE" class="ui-btn ui-btn-primary" style="padding: 8px 10px;" title="Tampilkan PPPoE terhubung ke ODP aktif">
+          🔗 ODP
+        </button>
+        <button id="btnTopSettings" class="ui-btn" style="padding: 8px 10px; width:auto;" title="Buka Pengaturan Sistem">
+          ⚙️
+        </button>
+      </div>
+
+      <div class="search-wrapper">
+        <span class="search-icon">🔍</span>
+        <input 
+          type="text" 
+          id="searchInput" 
+          class="search-box" 
+          list="combinedList" 
+          placeholder="Cari Nama, User, SSID, atau ODP..." 
+          autocomplete="off"
+        />
+        <button type="button" id="clearSearchBtn" class="clear-search-btn" title="Hapus teks">✕</button>
+        <datalist id="combinedList"></datalist>
+      </div>
+
+      <!-- Live Counters -->
+      <div class="stats-bar">
+        <div class="stat-badge" onclick="setFilter('online')" title="Filter Klien Online">
+          <span class="dot dot-online"></span>
+          <span id="countOnline">0</span> Online
+        </div>
+        <div class="stat-badge" onclick="setFilter('offline')" title="Filter Klien Offline">
+          <span class="dot dot-offline"></span>
+          <span id="countOffline">0</span> Offline
+        </div>
+        <div class="stat-badge" onclick="openSidebar()" title="Buka Detail ODP">
+          <span class="dot dot-odp"></span>
+          <span id="countOdp">0</span> ODP
+        </div>
+      </div>
     </div>
-    
-    <input type="text" id="searchInput" class="search-box" list="combinedList" placeholder="Cari Nama, User, SSID, atau ODP..." />
-    <datalist id="combinedList"></datalist>
   </div>
 
-  <div class="notif-bar" id="notifBar">Ready</div>
+  <!-- Toast Notification Bar -->
+  <div class="notif-bar" id="notifBar">
+    <span id="notifIcon">⚡</span>
+    <span id="notifText">Sistem Monitor Siap</span>
+  </div>
+
+  <!-- Map Target -->
   <div id="map"></div>
 
+  <!-- Sidebar Overlay & Drawer -->
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>
+  <aside class="sidebar-drawer" id="sidebarDrawer">
+    <div class="sidebar-header">
+      <div class="sidebar-header-info">
+        <h3>📡 PPPoE Live Monitor</h3>
+        <p>Fiber Network &amp; Client Management</p>
+      </div>
+      <button class="btn-close-sidebar" id="btnCloseSidebar" title="Tutup Menu">✕</button>
+    </div>
+
+    <div class="sidebar-content">
+      <!-- Section: Ringkasan Jaringan -->
+      <div>
+        <div class="sidebar-section-title">
+          <span>Ringkasan Jaringan</span>
+          <span id="sidebarTotalClients">0 Klien</span>
+        </div>
+        <div class="stat-cards-grid">
+          <div class="stat-card" id="cardFilterAll" onclick="setFilter('all')">
+            <div class="stat-card-title">👥 Total PPPoE</div>
+            <div class="stat-card-value" id="sideTotalCount">0</div>
+          </div>
+          <div class="stat-card" id="cardFilterOnline" onclick="setFilter('online')">
+            <div class="stat-card-title"><span class="dot dot-online"></span> Online</div>
+            <div class="stat-card-value" style="color:#16a34a;" id="sideOnlineCount">0</div>
+          </div>
+          <div class="stat-card" id="cardFilterOffline" onclick="setFilter('offline')">
+            <div class="stat-card-title"><span class="dot dot-offline"></span> Offline</div>
+            <div class="stat-card-value" style="color:#ef4444;" id="sideOfflineCount">0</div>
+          </div>
+          <div class="stat-card" id="cardFilterAcs" onclick="setFilter('acs')">
+            <div class="stat-card-title">⚡ Dengan ACS</div>
+            <div class="stat-card-value" style="color:#2563eb;" id="sideAcsCount">0</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section: Filter Cepat Tampilan -->
+      <div>
+        <div class="sidebar-section-title">Filter Tampilan Titik</div>
+        <div class="filter-pills">
+          <button class="filter-pill-btn active" id="btnFilterAll" onclick="setFilter('all')">Semua</button>
+          <button class="filter-pill-btn" id="btnFilterOnline" onclick="setFilter('online')">Online</button>
+          <button class="filter-pill-btn" id="btnFilterOffline" onclick="setFilter('offline')">Offline</button>
+          <button class="filter-pill-btn" id="btnFilterAcs" onclick="setFilter('acs')">ACS</button>
+        </div>
+      </div>
+
+      <!-- Section: Navigasi Cepat ODP -->
+      <div>
+        <div class="sidebar-section-title">
+          <span>Navigasi Titik ODP</span>
+          <button type="button" class="ui-btn ui-btn-danger" id="sideBtnClearOdp" style="padding: 2px 6px; font-size: 10px; width: auto;">Clear</button>
+        </div>
+        <div class="odp-select-wrapper">
+          <select id="odpQuickSelect">
+            <option value="">-- Pilih ODP untuk Fokus --</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Section: Server GenieACS -->
+      <div>
+        <div class="sidebar-section-title">
+          <span>Server GenieACS</span>
+          <span style="font-size:10px; color:#16a34a; font-weight:700;">● Port 7557 &amp; GUI</span>
+        </div>
+        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:10px; display:flex; flex-direction:column; gap:6px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px;">
+            <span style="color:#64748b; font-weight:600;">REST NBI:</span>
+            <span id="labelGenieAcsNbi" style="font-family:monospace; color:#2563eb; font-weight:700;">Port 7557</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px;">
+            <span style="color:#64748b; font-weight:600;">Web GUI:</span>
+            <span id="labelGenieAcsUrl" style="font-family:monospace; color:#0f172a; font-weight:700;">192.168.18.243</span>
+          </div>
+          <a id="linkGenieAcsGui" href="http://192.168.18.243/" target="_blank" class="ui-btn ui-btn-primary" style="text-decoration:none; width:100%; justify-content:center; margin-top:2px;">
+            🌐 Buka Web GUI GenieACS
+          </a>
+        </div>
+      </div>
+
+      <!-- Section: Ekspor Data Jaringan -->
+      <div>
+        <div class="sidebar-section-title">Ekspor &amp; Backup Data</div>
+        <div class="export-buttons-group">
+          <button type="button" class="btn-export" onclick="exportToCSV()" title="Ekspor seluruh data pelanggan ke format CSV (Excel)">
+            <span>📊 Ekspor Pelanggan (.CSV)</span>
+            <span class="btn-export-badge">Excel / Sheets</span>
+          </button>
+          <button type="button" class="btn-export" onclick="exportToGeoJSON()" title="Ekspor titik PPPoE dan ODP ke GeoJSON untuk GIS">
+            <span>🗺️ Ekspor Jaringan (.GeoJSON)</span>
+            <span class="btn-export-badge">QGIS / GIS</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Section: Peta & Lapisan -->
+      <div>
+        <div class="sidebar-section-title">Peta &amp; Pengaturan Lapisan</div>
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          <div style="display:flex; gap:6px;">
+            <select id="sideBasemapSelect" class="ui-select" style="flex:1;">
+              <option value="osm">🗺️ Map TKJ Sakti</option>
+              <option value="sat">🛰️ Esri Satellite</option>
+            </select>
+            <button type="button" id="sideFitAll" class="ui-btn" style="width:auto;">🔍 Fit</button>
+          </div>
+          <button type="button" id="btnToggleClusters" class="ui-btn" style="justify-content:space-between;">
+            <span>🧩 Marker Clustering</span>
+            <strong id="clusteringStatusText" style="color:#16a34a;">Aktif</strong>
+          </button>
+          <button type="button" id="btnToggleConnections" class="ui-btn" style="justify-content:space-between;">
+            <span>🔗 Garis Koneksi ODP</span>
+            <strong id="connectionsStatusText" style="color:#16a34a;">Aktif</strong>
+          </button>
+        </div>
+      </div>
+
+      <!-- Section: Pengaturan Sistem -->
+      <div>
+        <div class="sidebar-section-title">Konfigurasi</div>
+        <button type="button" id="btnSideSettings" class="ui-btn ui-btn-primary" style="width:100%; justify-content:center; gap:8px; padding:10px 12px; font-weight:700;">
+          ⚙️ Halaman Pengaturan
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- In-App Confirmation Modal Dialog -->
+  <div class="modal-backdrop" id="customModal">
+    <div class="modal-box">
+      <div class="modal-title" id="modalTitle">Konfirmasi</div>
+      <div class="modal-message" id="modalMessage">Apakah Anda yakin?</div>
+      <div class="modal-actions">
+        <button type="button" class="ui-btn" id="modalCancelBtn" style="width: auto;">Batal</button>
+        <button type="button" class="ui-btn ui-btn-primary" id="modalConfirmBtn" style="width: auto;">Ya, Lanjutkan</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings Modal Dialog -->
+  <div class="modal-backdrop" id="settingsModal">
+    <div class="modal-box" style="max-width: 480px; max-height: 90vh; display: flex; flex-direction: column;">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; border-bottom:1px solid #e2e8f0; padding-bottom:8px;">
+        <div>
+          <h3 style="margin:0; font-size:16px; color:#0f172a; font-weight:700;">⚙️ Pengaturan Sistem</h3>
+          <p style="margin:2px 0 0; font-size:11px; color:#64748b;">Konfigurasi server GenieACS, tile map, dan parameter tampilan</p>
+        </div>
+        <button type="button" class="btn-close-sidebar" id="btnCloseSettings" style="background:#f1f5f9; color:#475569;" title="Tutup">✕</button>
+      </div>
+
+      <div style="overflow-y:auto; flex:1; padding-right:4px; display:flex; flex-direction:column; gap:12px;">
+        <!-- Group 1: GenieACS -->
+        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px;">
+          <h4 style="margin:0 0 8px 0; font-size:13px; font-weight:700; color:#1e293b; display:flex; align-items:center; gap:6px;">
+            🖥️ Konfigurasi Server GenieACS (REST NBI Port 7557)
+          </h4>
+          <div class="edit-form-group">
+            <label>Metode Trigger Update ACS:</label>
+            <select id="settingAcsMode" class="ui-select" style="padding:6px 8px; font-size:12px; margin-bottom:4px;">
+              <option value="rest_7557">⚡ GenieACS REST API (NBI Port 7557 - Rekomendasi)</option>
+              <option value="webhook_custom">🪝 Webhook Kustom (n8n / Automasi Lain Port 5678)</option>
+            </select>
+          </div>
+          <div class="edit-form-group" style="margin-top:6px;">
+            <label>URL REST API GenieACS (Port 7557):</label>
+            <input type="text" id="settingGenieAcsNbi" placeholder="http://192.168.18.243:7557" />
+            <small style="font-size:10px; color:#64748b;">Port 7557 adalah port resmi REST API (NBI) GenieACS untuk refresh &amp; provisioning</small>
+          </div>
+          <div class="edit-form-group" style="margin-top:6px;">
+            <label>URL Web GUI GenieACS:</label>
+            <input type="text" id="settingGenieAcsUrl" placeholder="http://192.168.18.243/" />
+            <small style="font-size:10px; color:#64748b;">Alamat dashboard browser GenieACS (Port 80 atau 3000)</small>
+          </div>
+          <div class="edit-form-group" style="margin-top:6px;" id="groupAcsWebhook">
+            <label>URL Webhook Kustom (Opsional):</label>
+            <input type="text" id="settingGenieAcsWebhook" placeholder="http://192.168.18.243:5678/webhook/production/?devid=" />
+            <small style="font-size:10px; color:#64748b;">Digunakan bila memakai alur webhook khusus seperti n8n</small>
+          </div>
+        </div>
+
+        <!-- Group 2: Tile Map & Titik Tengah -->
+        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px;">
+          <h4 style="margin:0 0 8px 0; font-size:13px; font-weight:700; color:#1e293b; display:flex; align-items:center; gap:6px;">
+            🗺️ Pengaturan Tile Server &amp; Koordinat
+          </h4>
+          <div class="edit-form-group">
+            <label>URL Tile Peta (TKJ Sakti / Custom OSM):</label>
+            <input type="text" id="settingTileUrl" placeholder="https://map.tkjsakti.my.id/map.php?lyrs=s&z={z}&x={x}&y={y}" />
+            <small style="font-size:10px; color:#64748b;">Format URL tile layer Leaflet XYZ</small>
+          </div>
+          <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:6px; margin-top:6px;">
+            <div class="edit-form-group">
+              <label>Default Lat:</label>
+              <input type="text" id="settingDefaultLat" placeholder="-7.14" />
+            </div>
+            <div class="edit-form-group">
+              <label>Default Lng:</label>
+              <input type="text" id="settingDefaultLng" placeholder="110.95" />
+            </div>
+            <div class="edit-form-group">
+              <label>Default Zoom:</label>
+              <input type="number" id="settingDefaultZoom" min="1" max="19" placeholder="14" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Group 3: Tampilan & Clustering -->
+        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px;">
+          <h4 style="margin:0 0 8px 0; font-size:13px; font-weight:700; color:#1e293b; display:flex; align-items:center; gap:6px;">
+            🧩 Tampilan &amp; Radius Clustering
+          </h4>
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
+            <div class="edit-form-group">
+              <label>Radius Cluster (px):</label>
+              <select id="settingClusterRadius" class="ui-select" style="padding:6px 8px; font-size:12px;">
+                <option value="30">Rapat (30px)</option>
+                <option value="42">Standar (42px)</option>
+                <option value="60">Lebar (60px)</option>
+              </select>
+            </div>
+            <div class="edit-form-group">
+              <label>Tebal Garis Koneksi:</label>
+              <input type="number" id="settingLineWidth" min="1" max="6" value="2" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:14px; padding-top:10px; border-top:1px solid #e2e8f0;">
+        <button type="button" class="ui-btn ui-btn-danger" id="btnResetSettings" style="width:auto; font-size:11px;">
+          🔄 Reset Default
+        </button>
+        <div style="display:flex; gap:6px;">
+          <button type="button" class="ui-btn" id="btnCancelSettings" style="width:auto;">Batal</button>
+          <button type="button" class="ui-btn ui-btn-primary" id="btnSaveSettings" style="width:auto;">💾 Simpan</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
 <script>
-  const firebaseConfig = { databaseURL: "https://wifi-maps-fed29-default-rtdb.asia-southeast1.firebasedatabase.app/" };
+  /**
+   * Notification & Modal System
+   */
+  const notifBar = document.getElementById('notifBar');
+  const notifText = document.getElementById('notifText');
+  let notifTimeout = null;
+
+  function showNotification(msg, icon = '⚡', isPersistent = false) {
+    if (!notifText) return;
+    notifText.innerText = msg;
+    const notifIcon = document.getElementById('notifIcon');
+    if (notifIcon) notifIcon.innerText = icon;
+
+    if (notifTimeout) clearTimeout(notifTimeout);
+    if (!isPersistent) {
+      notifTimeout = setTimeout(() => {
+        if (lastodp) {
+          const connectedCount = Object.values(dataStore).filter(p => p.odp === lastodp).length;
+          notifText.innerText = `ODP Terpilih: ${lastodp} (${connectedCount} klien)`;
+        } else {
+          notifText.innerText = 'Sistem Monitor Siap';
+        }
+      }, 5000);
+    }
+  }
+
+  window.alert = function(msg) {
+    showNotification(msg, 'ℹ️');
+    console.log('[Alert]', msg);
+  };
+
+  function showConfirmModal(title, message, onConfirm, confirmText = 'Lanjutkan', isDanger = false) {
+    const modal = document.getElementById('customModal');
+    const titleEl = document.getElementById('modalTitle');
+    const msgEl = document.getElementById('modalMessage');
+    const cancelBtn = document.getElementById('modalCancelBtn');
+    const confirmBtn = document.getElementById('modalConfirmBtn');
+
+    titleEl.innerText = title;
+    msgEl.innerText = message;
+    confirmBtn.innerText = confirmText;
+    
+    if (isDanger) {
+      confirmBtn.className = 'ui-btn ui-btn-danger';
+    } else {
+      confirmBtn.className = 'ui-btn ui-btn-primary';
+    }
+
+    modal.style.display = 'flex';
+
+    const cleanup = () => {
+      modal.style.display = 'none';
+      cancelBtn.onclick = null;
+      confirmBtn.onclick = null;
+    };
+
+    cancelBtn.onclick = () => cleanup();
+    confirmBtn.onclick = () => {
+      cleanup();
+      if (typeof onConfirm === 'function') onConfirm();
+    };
+  }
+
+  const _nativeConfirm = window.confirm;
+  window.confirm = function(msg) {
+    try {
+      return _nativeConfirm(msg);
+    } catch (e) {
+      console.warn('[Confirm fallback in sandboxed iframe]', e);
+      return true;
+    }
+  };
+
+  function escapeHtml(str) {
+    if (!str && str !== 0) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  /**
+   * System Settings Configuration (GenieACS, Map, Clustering)
+   */
+  const DEFAULT_SETTINGS = {
+    genieAcsUrl: 'http://192.168.18.243/',
+    genieAcsNbiUrl: 'http://192.168.18.243:7557',
+    acsTriggerMode: 'rest_7557', // 'rest_7557' (Port 7557 REST API) | 'webhook_custom'
+    genieAcsWebhook: 'http://192.168.18.243:5678/webhook/production/?devid=',
+    tileLayerUrl: 'https://map.tkjsakti.my.id/map.php?lyrs=s&z={z}&x={x}&y={y}',
+    defaultLat: -7.14,
+    defaultLng: 110.95,
+    defaultZoom: 14,
+    clusterRadius: 42,
+    connectionLineWidth: 2
+  };
+
+  let appSettings = (() => {
+    try {
+      const saved = localStorage.getItem('wifi_map_settings');
+      if (saved) return { ...DEFAULT_SETTINGS, ...JSON.parse(saved) };
+    } catch (e) {
+      console.warn('Failed to load settings:', e);
+    }
+    return { ...DEFAULT_SETTINGS };
+  })();
+
+  function normalizeKey(str) {
+    return (str || '').toString().trim().toLowerCase();
+  }
+
+  /**
+   * Firebase Configuration
+   */
+  const firebaseConfig = { 
+    databaseURL: "https://wifi-maps-fed29-default-rtdb.asia-southeast1.firebasedatabase.app/" 
+  };
   firebase.initializeApp(firebaseConfig);
   const db = firebase.database();
   const ref = db.ref('pppoe');
   const odpRef = db.ref('odps/qco52JdRyPSRXbT2RMPH8lSqTUE3');
 
-  const baseOSM = L.tileLayer('https://map.tkjsakti.my.id/map.php?lyrs=s&z={z}&x={x}&y={y}',{maxZoom:19});
-  // CATATAN: Jika map.tkjsakti.my.id return 403, gunakan OpenStreetMap sebagai alternatif:
-  // const baseOSM = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution: '© OpenStreetMap contributors'});
-  
-  const baseEsriSat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19});
-  
-  const layerWithACS = L.layerGroup();
-  const layerNoACS = L.layerGroup();
+  /**
+   * Base Map Layers
+   * PRESERVED TILE LAYER: https://map.tkjsakti.my.id/map.php?lyrs=s&z={z}&x={x}&y={y}
+   */
+  const baseOSM = L.tileLayer(appSettings.tileLayerUrl || DEFAULT_SETTINGS.tileLayerUrl, {
+    maxZoom: 19,
+    attribution: 'Map &copy; TKJ Sakti / OSM'
+  });
+
+  baseOSM.on('tileerror', function(error, tile) {
+    if (!tile.hasOsmFallback) {
+      tile.hasOsmFallback = true;
+      const coords = error.coords;
+      tile.src = `https://tile.openstreetmap.org/${coords.z}/${coords.x}/${coords.y}.png`;
+    }
+  });
+
+  const baseEsriSat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 19,
+    attribution: '&copy; Esri World Imagery'
+  });
+
+  /**
+   * Marker Clustering & Layer Groups
+   */
+  let useClustering = true;
+  const clusterGroup = L.markerClusterGroup({
+    showCoverageOnHover: false,
+    maxClusterRadius: appSettings.clusterRadius || 42,
+    spiderfyOnMaxZoom: true,
+    disableClusteringAtZoom: 18,
+    chunkedLoading: true
+  });
+
+  const nonClusterGroup = L.layerGroup();
   const layerODP = L.layerGroup();
   const layerConnections = L.layerGroup();
 
-  const map = L.map('map', { layers: [baseOSM, layerWithACS, layerNoACS, layerODP, layerConnections] }).setView([-7.14, 110.95], 14);
-  L.control.layers({'Jalan': baseOSM, 'Satelit': baseEsriSat}, {"Dengan ACS": layerWithACS, "Tanpa ACS": layerNoACS, "ODP": layerODP, "Koneksi ke ODP": layerConnections}).addTo(map);
+  const map = L.map('map', { 
+    layers: [baseOSM, clusterGroup, layerODP, layerConnections],
+    zoomControl: false
+  }).setView([appSettings.defaultLat || -7.14, appSettings.defaultLng || 110.95], appSettings.defaultZoom || 14);
 
-  const onlineIcon = L.divIcon({ className: '', html: '<span class="marker-online"></span>', iconSize: [14, 14] });
-  const offlineIcon = L.divIcon({ className: '', html: '<span class="marker-offline"></span>', iconSize: [14, 14] });
-  const odpIcon = L.divIcon({ className: '', html: '<span class="marker-odp"></span>', iconSize: [14, 14] });
-  
+  L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+  L.control.layers(
+    { 'Jalan (TKJ Sakti)': baseOSM, 'Satelit (Esri)': baseEsriSat }, 
+    { 'ODP': layerODP, 'Koneksi ke ODP': layerConnections },
+    { position: 'topright' }
+  ).addTo(map);
+
+  const onlineIcon = L.divIcon({ className: '', html: '<span class="marker-online"></span>', iconSize: [14, 14], iconAnchor: [7, 7] });
+  const offlineIcon = L.divIcon({ className: '', html: '<span class="marker-offline"></span>', iconSize: [14, 14], iconAnchor: [7, 7] });
+  const odpIcon = L.divIcon({ className: '', html: '<span class="marker-odp"></span>', iconSize: [16, 16], iconAnchor: [8, 8] });
+
+  // In-memory Stores
   const markers = {};
   const odpMarkers = {};
   const connections = {};
@@ -125,34 +1239,345 @@
   const indexByFullname = {};
   const indexBySSID = {};
 
-  // Variabel untuk menyimpan ODP yang terakhir diklik
+  let currentFilter = 'all'; // 'all', 'online', 'offline', 'acs'
   let lastodp = null;
+  let editingMarker = null;
 
-  function normalizeKey(str) {
-    return (str || '').toString().trim().toLowerCase();
+  /**
+   * Filter System & Clustering Update
+   */
+  function setFilter(filterType) {
+    currentFilter = filterType;
+
+    // Update pill buttons
+    const pills = ['all', 'online', 'offline', 'acs'];
+    pills.forEach(p => {
+      const btn = document.getElementById(`btnFilter${p.charAt(0).toUpperCase() + p.slice(1)}`);
+      const card = document.getElementById(`cardFilter${p.charAt(0).toUpperCase() + p.slice(1)}`);
+      if (btn) btn.classList.toggle('active', p === filterType);
+      if (card) card.classList.toggle('active', p === filterType);
+    });
+
+    applyFilterToMap();
+    showNotification(`Filter aktif: ${filterType.toUpperCase()}`, '🎯');
   }
 
-  // Fungsi untuk mencari ODP berdasarkan nama
+  function matchesCurrentFilter(data) {
+    if (!data) return false;
+    const isOnline = (data.online == 1 || data.status == 1);
+    const hasACS = (data.ACS && data.ACS !== "" && data.ACS !== "0");
+
+    if (currentFilter === 'online') return isOnline;
+    if (currentFilter === 'offline') return !isOnline;
+    if (currentFilter === 'acs') return hasACS;
+    return true; // 'all'
+  }
+
+  function applyFilterToMap() {
+    clusterGroup.clearLayers();
+    nonClusterGroup.clearLayers();
+
+    Object.keys(markers).forEach(key => {
+      const marker = markers[key];
+      const data = dataStore[key];
+      if (data && matchesCurrentFilter(data)) {
+        if (useClustering) {
+          clusterGroup.addLayer(marker);
+        } else {
+          nonClusterGroup.addLayer(marker);
+        }
+      }
+    });
+  }
+
+  function toggleClustering() {
+    useClustering = !useClustering;
+    const statusText = document.getElementById('clusteringStatusText');
+    if (statusText) {
+      statusText.innerText = useClustering ? 'Aktif' : 'Non-aktif';
+      statusText.style.color = useClustering ? '#16a34a' : '#64748b';
+    }
+
+    if (useClustering) {
+      map.removeLayer(nonClusterGroup);
+      map.addLayer(clusterGroup);
+    } else {
+      map.removeLayer(clusterGroup);
+      map.addLayer(nonClusterGroup);
+    }
+
+    applyFilterToMap();
+    showNotification(`Marker Clustering: ${useClustering ? 'Diaktifkan' : 'Dinonaktifkan'}`, '🧩');
+  }
+
+  function toggleConnections() {
+    const isVisible = map.hasLayer(layerConnections);
+    const statusText = document.getElementById('connectionsStatusText');
+    if (isVisible) {
+      map.removeLayer(layerConnections);
+      if (statusText) {
+        statusText.innerText = 'Disembunyikan';
+        statusText.style.color = '#64748b';
+      }
+      showNotification('Garis koneksi disembunyikan', '🔗');
+    } else {
+      map.addLayer(layerConnections);
+      if (statusText) {
+        statusText.innerText = 'Aktif';
+        statusText.style.color = '#16a34a';
+      }
+      showNotification('Garis koneksi ditampilkan', '🔗');
+    }
+  }
+
+  /**
+   * Counters & Overview
+   */
+  function updateCounters() {
+    let online = 0;
+    let offline = 0;
+    let acs = 0;
+    const pppoeItems = Object.values(dataStore);
+    pppoeItems.forEach(item => {
+      const isOnline = (item.online == 1 || item.status == 1);
+      const hasACS = (item.ACS && item.ACS !== "" && item.ACS !== "0");
+      if (isOnline) online++;
+      else offline++;
+      if (hasACS) acs++;
+    });
+
+    const total = pppoeItems.length;
+    const odpCount = Object.keys(odpDataStore).length;
+
+    // Top Bar Counters
+    const elOnline = document.getElementById('countOnline');
+    const elOffline = document.getElementById('countOffline');
+    const elOdp = document.getElementById('countOdp');
+    if (elOnline) elOnline.innerText = online;
+    if (elOffline) elOffline.innerText = offline;
+    if (elOdp) elOdp.innerText = odpCount;
+
+    // Sidebar Counters
+    const sideTotal = document.getElementById('sideTotalCount');
+    const sideOnline = document.getElementById('sideOnlineCount');
+    const sideOffline = document.getElementById('sideOfflineCount');
+    const sideAcs = document.getElementById('sideAcsCount');
+    const sideTotalClients = document.getElementById('sidebarTotalClients');
+
+    if (sideTotal) sideTotal.innerText = total;
+    if (sideOnline) sideOnline.innerText = online;
+    if (sideOffline) sideOffline.innerText = offline;
+    if (sideAcs) sideAcs.innerText = acs;
+    if (sideTotalClients) sideTotalClients.innerText = `${total} Klien`;
+  }
+
+  /**
+   * Sidebar Drawer Control
+   */
+  const sidebarOverlay = document.getElementById('sidebarOverlay');
+  const sidebarDrawer = document.getElementById('sidebarDrawer');
+
+  function openSidebar() {
+    sidebarOverlay.classList.add('active');
+    sidebarDrawer.classList.add('active');
+    populateOdpSelect();
+  }
+
+  function closeSidebar() {
+    sidebarOverlay.classList.remove('active');
+    sidebarDrawer.classList.remove('active');
+  }
+
+  document.getElementById('btnOpenSidebar').addEventListener('click', openSidebar);
+  document.getElementById('btnCloseSidebar').addEventListener('click', closeSidebar);
+  sidebarOverlay.addEventListener('click', closeSidebar);
+
+  function populateOdpSelect() {
+    const select = document.getElementById('odpQuickSelect');
+    if (!select) return;
+    const currentVal = select.value;
+    select.innerHTML = '<option value="">-- Pilih ODP untuk Fokus --</option>';
+
+    Object.values(odpDataStore).forEach(odp => {
+      const name = odp.name || 'ODP';
+      const count = Object.values(dataStore).filter(p => p.odp === name).length;
+      const opt = document.createElement('option');
+      opt.value = name;
+      opt.innerText = `${name} (${count} klien)`;
+      if (name === currentVal) opt.selected = true;
+      select.appendChild(opt);
+    });
+  }
+
+  document.getElementById('odpQuickSelect').addEventListener('change', function(e) {
+    const odpName = e.target.value;
+    if (!odpName) return;
+    lastodp = odpName;
+    const odp = findODPByName(odpName);
+    if (odp && odp.lat && odp.lng) {
+      map.setView([parseFloat(odp.lat), parseFloat(odp.lng)], 17);
+      const odpKey = findODPKeyByName(odpName);
+      if (odpKey && odpMarkers[odpKey]) {
+        odpMarkers[odpKey].openPopup();
+      }
+      showNotification(`Fokus ke ODP: ${odpName}`, '📍');
+      closeSidebar();
+    }
+  });
+
+  document.getElementById('sideBtnClearOdp').addEventListener('click', () => {
+    lastodp = null;
+    const select = document.getElementById('odpQuickSelect');
+    if (select) select.value = '';
+    showNotification('Pilihan ODP direset', '❌');
+  });
+
+  document.getElementById('btnToggleClusters').addEventListener('click', toggleClustering);
+  document.getElementById('btnToggleConnections').addEventListener('click', toggleConnections);
+
+  /**
+   * Export Features
+   */
+  function exportToCSV() {
+    const items = Object.values(dataStore);
+    if (items.length === 0) {
+      showNotification('Tidak ada data PPPoE untuk diekspor', '⚠️');
+      return;
+    }
+
+    const headers = [
+      'Username', 'Nama Lengkap', 'SSID', 'IP Address', 'Profile', 
+      'RxPower', 'ODP', 'WhatsApp', 'Uptime', 'Status', 'ACS', 'Latitude', 'Longitude'
+    ];
+
+    const rows = items.map(item => [
+      `"${(item.user || '').replace(/"/g, '""')}"`,
+      `"${(item.fullname || '').replace(/"/g, '""')}"`,
+      `"${(item.ssid || '').replace(/"/g, '""')}"`,
+      `"${(item.address || '').replace(/"/g, '""')}"`,
+      `"${(item.profile || '').replace(/"/g, '""')}"`,
+      `"${(item.rxpower || '').replace(/"/g, '""')}"`,
+      `"${(item.odp || '').replace(/"/g, '""')}"`,
+      `"${(item.whatsapp || '').replace(/"/g, '""')}"`,
+      `"${(item.uptime || '').replace(/"/g, '""')}"`,
+      (item.online == 1 || item.status == 1) ? '"Online"' : '"Offline"',
+      item.ACS ? '"Ya"' : '"Tidak"',
+      `"${item.latitude || ''}"`,
+      `"${item.longitude || ''}"`
+    ]);
+
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const dateStr = new Date().toISOString().slice(0, 10);
+    link.href = url;
+    link.download = `pppoe-pelanggan-${dateStr}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showNotification(`Berhasil ekspor ${items.length} pelanggan ke CSV!`, '📥');
+  }
+
+  function exportToGeoJSON() {
+    const pppoeItems = Object.values(dataStore);
+    const odpItems = Object.values(odpDataStore);
+
+    if (pppoeItems.length === 0 && odpItems.length === 0) {
+      showNotification('Tidak ada data jaringan untuk diekspor', '⚠️');
+      return;
+    }
+
+    const features = [];
+
+    // PPPoE Client Points
+    pppoeItems.forEach(item => {
+      const lat = parseFloat(item.latitude);
+      const lng = parseFloat(item.longitude);
+      if (!isNaN(lat) && !isNaN(lng)) {
+        features.push({
+          type: 'Feature',
+          geometry: {
+            type: 'Point',
+            coordinates: [lng, lat]
+          },
+          properties: {
+            layer: 'PPPoE Client',
+            user: item.user || '',
+            fullname: item.fullname || '',
+            ssid: item.ssid || '',
+            address: item.address || '',
+            profile: item.profile || '',
+            rxpower: item.rxpower || '',
+            odp: item.odp || '',
+            whatsapp: item.whatsapp || '',
+            uptime: item.uptime || '',
+            status: (item.online == 1 || item.status == 1) ? 'Online' : 'Offline',
+            acs: Boolean(item.ACS)
+          }
+        });
+      }
+    });
+
+    // ODP Fiber Points
+    odpItems.forEach(item => {
+      const lat = parseFloat(item.lat);
+      const lng = parseFloat(item.lng);
+      if (!isNaN(lat) && !isNaN(lng)) {
+        features.push({
+          type: 'Feature',
+          geometry: {
+            type: 'Point',
+            coordinates: [lng, lat]
+          },
+          properties: {
+            layer: 'ODP Fiber Box',
+            name: item.name || 'ODP',
+            connectedClients: Object.values(dataStore).filter(p => p.odp === item.name).length
+          }
+        });
+      }
+    });
+
+    const geoJson = {
+      type: 'FeatureCollection',
+      name: 'PPPoE_ODP_Network_Map',
+      features: features
+    };
+
+    const blob = new Blob([JSON.stringify(geoJson, null, 2)], { type: 'application/geo+json;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const dateStr = new Date().toISOString().slice(0, 10);
+    link.href = url;
+    link.download = `jaringan-fiber-${dateStr}.geojson`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showNotification(`Berhasil ekspor ${features.length} titik ke GeoJSON!`, '🗺️');
+  }
+
+  /**
+   * ODP Lookup & Deletion
+   */
   function findODPByName(odpName) {
     if (!odpName) return null;
-    const normalizedSearch = normalizeKey(odpName);
+    const search = normalizeKey(odpName);
     for (const key in odpDataStore) {
       const odp = odpDataStore[key];
-      if (normalizeKey(odp.name) === normalizedSearch) {
-        return odp;
-      }
+      if (normalizeKey(odp.name) === search) return odp;
     }
     return null;
   }
 
   function findODPKeyByName(odpName) {
     if (!odpName) return null;
-    const normalizedSearch = normalizeKey(odpName);
+    const search = normalizeKey(odpName);
     for (const key in odpDataStore) {
       const odp = odpDataStore[key];
-      if (normalizeKey(odp.name) === normalizedSearch) {
-        return key;
-      }
+      if (normalizeKey(odp.name) === search) return key;
     }
     return null;
   }
@@ -160,37 +1585,41 @@
   function deleteODP(odpName) {
     if (!odpName) return;
 
-    const confirmed = confirm(`Apakah Anda yakin ingin menghapus ODP: ${odpName}?\n\nTindakan ini tidak dapat dibatalkan!`);
-    if (!confirmed) return;
+    showConfirmModal(
+      'Hapus ODP',
+      `Apakah Anda yakin ingin menghapus ODP: "${odpName}"?\nSemua koneksi klien ke ODP ini akan dilepas. Tindakan ini tidak dapat dibatalkan!`,
+      () => {
+        const odpKey = findODPKeyByName(odpName);
+        if (!odpKey) {
+          showNotification('ODP tidak ditemukan!', '⚠️');
+          return;
+        }
 
-    const odpKey = findODPKeyByName(odpName);
-    if (!odpKey) {
-      alert('ODP tidak ditemukan!');
-      return;
-    }
+        odpRef.child(odpKey).remove()
+          .then(() => {
+            showNotification(`ODP "${odpName}" berhasil dihapus`, '🗑️');
 
-    odpRef.child(odpKey).remove()
-      .then(() => {
-        console.log('ODP berhasil dihapus:', odpName);
-        document.getElementById('notifBar').innerText = `ODP ${odpName} dihapus`;
+            Object.keys(dataStore).forEach(pppoeKey => {
+              if (dataStore[pppoeKey].odp && normalizeKey(dataStore[pppoeKey].odp) === normalizeKey(odpName)) {
+                ref.child(pppoeKey).update({ odp: '' }).catch(e => console.error('Gagal reset ODP:', e));
+              }
+            });
 
-        // Hapus assign ODP dari semua PPPoE yang terhubung ke ODP ini
-        Object.keys(dataStore).forEach(pppoeKey => {
-          if (dataStore[pppoeKey].odp && normalizeKey(dataStore[pppoeKey].odp) === normalizeKey(odpName)) {
-            ref.child(pppoeKey).update({ odp: '' }).catch(e => console.error('Gagal reset odp di PPPoE', e));
-          }
-        });
-
-        // Update semua koneksi PPPoE
-        setTimeout(updateAllConnectionsFromODP, 50);
-      })
-      .catch(error => {
-        console.error('Error deleting ODP:', error);
-        alert(`Gagal menghapus ODP: ${error.message}`);
-      });
+            setTimeout(updateAllConnectionsFromODP, 50);
+          })
+          .catch(err => {
+            console.error('Error delete ODP:', err);
+            showNotification(`Gagal menghapus ODP: ${err.message}`, '❌');
+          });
+      },
+      'Hapus Sekarang',
+      true
+    );
   }
 
-  // Fungsi untuk menggambar garis koneksi dari PPPoE ke ODP
+  /**
+   * Lines & Visual Connections
+   */
   function drawConnectionToPPPoE(pppoeKey, pppoeData, odpData) {
     if (!pppoeData || !odpData || !pppoeData.latitude || !pppoeData.longitude || !odpData.lat || !odpData.lng) return;
 
@@ -199,32 +1628,27 @@
     const odpLat = parseFloat(odpData.lat);
     const odpLng = parseFloat(odpData.lng);
 
-    // Hapus koneksi yang sudah ada
+    if (isNaN(pppoeLat) || isNaN(pppoeLng) || isNaN(odpLat) || isNaN(odpLng)) return;
+
     if (connections[pppoeKey]) {
       layerConnections.removeLayer(connections[pppoeKey]);
     }
 
-    // Buat polyline baru
-    const latlngs = [
-      [pppoeLat, pppoeLng],
-      [odpLat, odpLng]
-    ];
-
+    const latlngs = [[pppoeLat, pppoeLng], [odpLat, odpLng]];
     const isOnline = (pppoeData.online == 1 || pppoeData.status == 1);
-    const color = isOnline ? '#16a34a' : '#ef4444'; // hijau untuk online, merah untuk offline
+    const color = isOnline ? '#16a34a' : '#ef4444';
 
     const polyline = L.polyline(latlngs, {
       color: color,
-      weight: 2,
-      opacity: 0.7,
-      dashArray: '5, 5' // garis putus-putus
+      weight: appSettings.connectionLineWidth || 2,
+      opacity: 0.75,
+      dashArray: '5, 5'
     });
 
     layerConnections.addLayer(polyline);
     connections[pppoeKey] = polyline;
   }
 
-  // Fungsi untuk menghapus koneksi
   function removeConnection(pppoeKey) {
     if (connections[pppoeKey]) {
       layerConnections.removeLayer(connections[pppoeKey]);
@@ -232,11 +1656,8 @@
     }
   }
 
-  // Fungsi untuk update koneksi berdasarkan ODP yang di-assign
   function updateConnectionForPPPoE(pppoeKey, pppoeData) {
     if (!pppoeData) return;
-
-    // Jika ada ODP yang di-assign
     if (pppoeData.odp) {
       const assignedODP = findODPByName(pppoeData.odp);
       if (assignedODP) {
@@ -245,21 +1666,20 @@
         removeConnection(pppoeKey);
       }
     } else {
-      // Jika tidak ada ODP yang di-assign, hapus koneksinya
       removeConnection(pppoeKey);
     }
   }
 
-  // Fungsi untuk update semua koneksi dari ODP
   function updateAllConnectionsFromODP() {
     Object.keys(dataStore).forEach(pppoeKey => {
       const pppoeData = dataStore[pppoeKey];
-      if (pppoeData) {
-        updateConnectionForPPPoE(pppoeKey, pppoeData);
-      }
+      if (pppoeData) updateConnectionForPPPoE(pppoeKey, pppoeData);
     });
   }
 
+  /**
+   * Search Indexes
+   */
   function setIndex(key, data) {
     const userKey = normalizeKey(data.user);
     const fullnameKey = normalizeKey(data.fullname);
@@ -281,29 +1701,29 @@
     if (ssidKey && indexBySSID[ssidKey] === key) delete indexBySSID[ssidKey];
   }
 
+  /**
+   * ODP Marker Management
+   */
   function addOrUpdateOdpMarker(key, data) {
     if (!data.lat || !data.lng) return;
 
     odpDataStore[key] = data;
+    updateCounters();
+    populateOdpSelect();
 
     const lat = parseFloat(data.lat);
     const lng = parseFloat(data.lng);
+    if (isNaN(lat) || isNaN(lng)) return;
 
     if (odpMarkers[key]) {
       odpMarkers[key].setLatLng([lat, lng]).setPopupContent(buildOdpPopup(data));
     } else {
       const m = L.marker([lat, lng], { icon: odpIcon }).bindPopup(buildOdpPopup(data));
       
-      // Tambahkan event listener untuk menyimpan nama ODP ketika diklik
       m.on('click', function() {
         lastodp = data.name || 'ODP-' + key;
-        console.log('ODP diklik:', lastodp);
-        
-        // Hitung jumlah PPPoE yang terhubung ke ODP ini
-        const connectedPPPoE = Object.values(dataStore).filter(pppoe => pppoe.odp === lastodp).length;
-        
-        // Update notifikasi bar untuk menampilkan ODP yang dipilih dan jumlah koneksi
-        document.getElementById('notifBar').innerText = `ODP: ${lastodp} (${connectedPPPoE} PPPoE terhubung)`;
+        const connectedPPPoE = Object.values(dataStore).filter(p => p.odp === lastodp).length;
+        showNotification(`ODP: ${lastodp} (${connectedPPPoE} klien terhubung)`, '📍', true);
       });
       
       layerODP.addLayer(m);
@@ -315,137 +1735,146 @@
     const lat = parseFloat(item.lat || 0);
     const lng = parseFloat(item.lng || 0);
     const odpName = item.name || 'ODP';
-    
-    // Hitung jumlah PPPoE yang terhubung ke ODP ini
-    const connectedCount = Object.values(dataStore).filter(pppoe => pppoe.odp === odpName).length;
-
+    const connectedCount = Object.values(dataStore).filter(p => p.odp === odpName).length;
     const gmLink = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
 
     return `
-      <div style="font-size:12px; min-width: 200px;">
-        <strong style="font-size:14px; display:block; margin-bottom:5px;">ODP: ${odpName}</strong>
-        <span class="popup-label">Koordinat:</span> ${lat.toFixed(6)}, ${lng.toFixed(6)}<br/>
-        <span class="popup-label">PPPoE Terhubung:</span> ${connectedCount}<br/>
-        
-        <hr style="margin:8px 0; border:0; border-top:1px solid #eee"/>
-        <div style="display:flex; gap:5px; margin:8px 0;">
-          <button class="btn-update" onclick="deleteODP('${odpName.replace(/'/g, "\\'")}')" style="background:#dc3545; flex:1; padding:4px;">🗑️ Hapus ODP</button>
+      <div class="popup-card">
+        <div class="popup-header">
+          <h4 class="popup-title">${escapeHtml(odpName)}</h4>
+          <span class="status-pill odp">ODP</span>
         </div>
-        <hr style="margin:8px 0; border:0; border-top:1px solid #eee"/>
-        <div style="display:flex; justify-content:space-between">
-          <a href="${gmLink}" target="_blank" style="text-decoration:none">📍 Google Maps</a>
+        <div class="popup-info-grid">
+          <span class="info-label">Koordinat:</span>
+          <span class="info-val">${lat.toFixed(6)}, ${lng.toFixed(6)}</span>
+          <span class="info-label">Terhubung:</span>
+          <span class="info-val"><strong>${connectedCount}</strong> PPPoE</span>
+        </div>
+        <div class="popup-buttons">
+          <button class="popup-btn popup-btn-del" onclick="deleteODP('${escapeHtml(odpName).replace(/'/g, "\\'")}')">🗑️ Hapus ODP</button>
+        </div>
+        <div class="popup-footer-links">
+          <a href="${gmLink}" target="_blank">📍 Google Maps</a>
         </div>
       </div>
     `;
   }
 
+  /**
+   * PPPoE Popup & Edit Mode
+   */
   function buildPopup(item, isEditMode = false) {
     const lat = parseFloat(item.latitude || 0);
     const lon = parseFloat(item.longitude || 0);
-
     const gmLink = `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
-    const waLink = item.whatsapp ? `https://wa.me/${item.whatsapp.replace(/[^0-9]/g,'')}` : '#';
+    const cleanWa = (item.whatsapp || '').replace(/[^0-9]/g, '');
+    const waLink = cleanWa ? `https://wa.me/${cleanWa}` : '#';
     const isOnline = (item.online == 1 || item.status == 1);
-    const statusColor = isOnline ? 'green' : 'red';
-    const statusText = isOnline ? 'Online' : 'Offline';
+    const safeUser = escapeHtml(item.user || '');
 
     if (isEditMode) {
-      // Edit mode - tampilkan form
       return `
-        <div style="font-size:12px; min-width: 250px;">
-          <strong style="font-size:14px; display:block; margin-bottom:10px;">Edit PPPoE Data</strong>
-          
-          <div style="margin-bottom:8px;">
-            <label class="edit-label">Nama:</label>
-            <input type="text" id="edit-fullname" value="${item.fullname || ''}" class="edit-input" />
+        <div class="popup-card" style="min-width: 260px;">
+          <div class="popup-header">
+            <h4 class="popup-title">Edit Data PPPoE</h4>
+            <span class="status-pill ${isOnline ? 'online' : 'offline'}">${isOnline ? 'ONLINE' : 'OFFLINE'}</span>
           </div>
           
-          <div style="margin-bottom:8px;">
-            <label class="edit-label">User:</label>
-            <input type="text" id="edit-user" value="${item.user || ''}" class="edit-input" />
+          <div class="edit-form-group">
+            <label>Nama Lengkap:</label>
+            <input type="text" id="edit-fullname" value="${escapeHtml(item.fullname || '')}" />
           </div>
-          
-          <div style="margin-bottom:8px;">
-            <label class="edit-label">SSID:</label>
-            <input type="text" id="edit-ssid" value="${item.ssid || ''}" class="edit-input" />
+          <div class="edit-form-group">
+            <label>Username PPPoE:</label>
+            <input type="text" id="edit-user" value="${safeUser}" />
           </div>
-          
-          <div style="margin-bottom:8px;">
-            <label class="edit-label">IP Address:</label>
-            <input type="text" id="edit-address" value="${item.address || ''}" class="edit-input" />
+          <div class="edit-form-group">
+            <label>SSID / Wi-Fi:</label>
+            <input type="text" id="edit-ssid" value="${escapeHtml(item.ssid || '')}" />
           </div>
-          
-          <div style="margin-bottom:8px;">
-            <label class="edit-label">Profile:</label>
-            <input type="text" id="edit-profile" value="${item.profile || ''}" class="edit-input" />
+          <div class="edit-form-group">
+            <label>IP Address:</label>
+            <input type="text" id="edit-address" value="${escapeHtml(item.address || '')}" />
           </div>
-          
-          <div style="margin-bottom:8px;">
-            <label class="edit-label">RxPower:</label>
-            <input type="text" id="edit-rxpower" value="${item.rxpower || ''}" class="edit-input" />
+          <div class="edit-form-group">
+            <label>Paket Profile:</label>
+            <input type="text" id="edit-profile" value="${escapeHtml(item.profile || '')}" />
           </div>
-          
-          <div style="margin-bottom:8px;">
-            <label class="edit-label">ODP:</label>
-            <div style="display: flex; gap: 5px;">
-              <input type="text" id="edit-odp" value="${item.odp || ''}" class="edit-input" placeholder="Nama ODP terhubung" style="flex: 1;" />
-              <button type="button" onclick="assignSelectedODP()" class="btn-update" style="background: #17a2b8; padding: 4px 8px; font-size: 10px; white-space: nowrap;">📍 Assign</button>
+          <div class="edit-form-group">
+            <label>RxPower (dBm):</label>
+            <input type="text" id="edit-rxpower" value="${escapeHtml(item.rxpower || '')}" />
+          </div>
+          <div class="edit-form-group">
+            <label>ODP Terhubung:</label>
+            <div style="display:flex; gap:4px;">
+              <input type="text" id="edit-odp" value="${escapeHtml(item.odp || '')}" placeholder="Nama ODP" style="flex:1;" />
+              <button type="button" onclick="assignSelectedODP()" class="ui-btn" style="width:auto; padding:4px 8px; font-size:11px;">📍 Assign</button>
             </div>
           </div>
-          
-          <div style="margin-bottom:8px;">
-            <label class="edit-label">WhatsApp:</label>
-            <input type="text" id="edit-whatsapp" value="${item.whatsapp || ''}" class="edit-input" placeholder="628xxxxxxxxx" />
+          <div class="edit-form-group">
+            <label>Nomor WhatsApp:</label>
+            <input type="text" id="edit-whatsapp" value="${escapeHtml(item.whatsapp || '')}" placeholder="628xxxxxxxxx" />
           </div>
-          
-          <div style="display:flex; gap:5px; margin-top:10px;">
-            <button class="btn-update" onclick="savePPPoEEdits('${item.user || ''}')">💾 Save</button>
-            <button class="btn-update" onclick="cancelPPPoEEdits('${item.user || ''}')" style="background:#6c757d;">❌ Cancel</button>
-          </div>
-        </div>
-      `;
-    } else {
-      // View mode - tampilkan data
-      return `
-        <div style="font-size:12px; min-width: 200px;">
-          <strong style="font-size:14px; display:block; margin-bottom:5px;">${item.fullname || 'Tanpa Nama'}</strong>
-          <span class="popup-label">User:</span> ${item.user || '-'}<br/>
-          <span class="popup-label">SSID:</span> ${item.ssid || '-'}<br/>
-          <span class="popup-label">IP:</span> <a href="http://${item.address}" target="_blank">${item.address || '-'}</a><br/>
-          <span class="popup-label">Profile:</span> ${item.profile || '-'}<br/>
-          <span class="popup-label">RxPower:</span> ${item.rxpower || '-'}<br/>
-          <span class="popup-label">ODP:</span> ${item.odp || '-'}<br/>
-          <span class="popup-label">Uptime:</span> ${item.uptime || '-'}<br/>
-          <span class="popup-label">Status:</span> <span style="color:${statusColor}; font-weight:bold">${statusText}</span><br/>
-          
-          <div style="display:flex; gap:5px; margin:8px 0;">
-            <button class="btn-update" onclick="editPPPoE('${item.user || ''}')" style="background:#28a745; flex:1;">✏️ Edit</button>
-            <button class="btn-update" onclick="updateACS('${item.user}')" style="flex:1;">Update ACS</button>
-            <button class="btn-update" onclick="deletePPPoE('${item.user || ''}')" style="background:#dc3545; flex:0.8; padding:4px;">🗑️ Hapus</button>
-          </div>
-          
-          <hr style="margin:8px 0; border:0; border-top:1px solid #eee"/>
-          <div style="display:flex; justify-content:space-between">
-            <a href="${gmLink}" target="_blank" style="text-decoration:none">📍 Google Maps</a>
-            <a href="${waLink}" target="_blank" style="text-decoration:none">💬 WhatsApp</a>
+
+          <div class="popup-buttons" style="margin-top:10px;">
+            <button class="popup-btn popup-btn-edit" id="btnSavePPPoE" onclick="savePPPoEEdits('${safeUser.replace(/'/g, "\\'")}')">💾 Simpan</button>
+            <button class="popup-btn" style="background:#64748b; color:#fff;" onclick="cancelPPPoEEdits('${safeUser.replace(/'/g, "\\'")}')">✕ Batal</button>
           </div>
         </div>
       `;
     }
+
+    return `
+      <div class="popup-card">
+        <div class="popup-header">
+          <h4 class="popup-title">${escapeHtml(item.fullname || 'Tanpa Nama')}</h4>
+          <span class="status-pill ${isOnline ? 'online' : 'offline'}">${isOnline ? 'ONLINE' : 'OFFLINE'}</span>
+        </div>
+
+        <div class="popup-info-grid">
+          <span class="info-label">User:</span>
+          <span class="info-val"><strong>${safeUser || '-'}</strong></span>
+
+          <span class="info-label">SSID:</span>
+          <span class="info-val">${escapeHtml(item.ssid || '-')}</span>
+
+          <span class="info-label">IP:</span>
+          <span class="info-val">${item.address ? `<a href="http://${escapeHtml(item.address)}" target="_blank">${escapeHtml(item.address)}</a>` : '-'}</span>
+
+          <span class="info-label">Profile:</span>
+          <span class="info-val">${escapeHtml(item.profile || '-')}</span>
+
+          <span class="info-label">RxPower:</span>
+          <span class="info-val">${escapeHtml(item.rxpower || '-')}</span>
+
+          <span class="info-label">ODP:</span>
+          <span class="info-val"><strong>${escapeHtml(item.odp || '-')}</strong></span>
+
+          <span class="info-label">Uptime:</span>
+          <span class="info-val">${escapeHtml(item.uptime || '-')}</span>
+        </div>
+
+        <div class="popup-buttons">
+          <button class="popup-btn popup-btn-edit" onclick="editPPPoE('${safeUser.replace(/'/g, "\\'")}')">✏️ Edit</button>
+          <button class="popup-btn popup-btn-acs" onclick="updateACS('${safeUser.replace(/'/g, "\\'")}')">⚡ ACS</button>
+          <button class="popup-btn popup-btn-del" onclick="deletePPPoE('${safeUser.replace(/'/g, "\\'")}')">🗑️ Hapus</button>
+        </div>
+
+        <div class="popup-footer-links">
+          <a href="${gmLink}" target="_blank">📍 Google Maps</a>
+          <a href="${(appSettings.genieAcsUrl || 'http://192.168.18.243/').replace(/\/+$/, '')}/devices?query=${encodeURIComponent(safeUser)}" target="_blank" style="color:#2563eb; font-weight:600;" title="Buka perangkat ini di GenieACS">🖥️ GenieACS</a>
+          ${cleanWa ? `<a href="${waLink}" target="_blank" style="color:#16a34a; font-weight:600;">💬 WhatsApp</a>` : ''}
+        </div>
+      </div>
+    `;
   }
 
-  // Variabel untuk track marker yang sedang diedit
-  let editingMarker = null;
-
   function editPPPoE(user) {
-    // Cari marker berdasarkan user
     const markerKey = Object.keys(dataStore).find(key => dataStore[key].user === user);
     if (!markerKey || !markers[markerKey]) return;
 
     editingMarker = markers[markerKey];
     const item = dataStore[markerKey];
-    
-    // Update popup content ke mode edit
     editingMarker.setPopupContent(buildPopup(item, true));
     editingMarker.openPopup();
   }
@@ -453,14 +1882,12 @@
   function savePPPoEEdits(oldUser) {
     if (!editingMarker) return;
 
-    // Disable tombol save dan tampilkan loading
-    const saveBtn = document.querySelector('.btn-update[onclick*="savePPPoEEdits"]');
+    const saveBtn = document.getElementById('btnSavePPPoE');
     if (saveBtn) {
       saveBtn.disabled = true;
-      saveBtn.innerHTML = '⏳ Saving...';
+      saveBtn.innerHTML = '⏳ Menyimpan...';
     }
 
-    // Ambil nilai dari form
     const newData = {
       fullname: document.getElementById('edit-fullname').value.trim(),
       user: document.getElementById('edit-user').value.trim(),
@@ -472,60 +1899,48 @@
       whatsapp: document.getElementById('edit-whatsapp').value.trim()
     };
 
-    // Validasi input
     if (!newData.user) {
-      alert('User tidak boleh kosong!');
+      showNotification('Username PPPoE tidak boleh kosong!', '⚠️');
       if (saveBtn) {
         saveBtn.disabled = false;
-        saveBtn.innerHTML = '💾 Save';
+        saveBtn.innerHTML = '💾 Simpan';
       }
       return;
     }
 
-    // Cari key marker yang sedang diedit
     const markerKey = Object.keys(dataStore).find(key => dataStore[key].user === oldUser);
     if (!markerKey) {
       if (saveBtn) {
         saveBtn.disabled = false;
-        saveBtn.innerHTML = '💾 Save';
+        saveBtn.innerHTML = '💾 Simpan';
       }
       return;
     }
 
-    // Update data di Firebase
     const updates = {};
     updates[markerKey] = { ...dataStore[markerKey], ...newData };
-    
+
     ref.update(updates)
       .then(() => {
-        console.log('Data PPPoE berhasil diupdate:', newData);
-        alert('Data berhasil disimpan!');
-        
-        // Reset editing state
+        showNotification(`Data "${newData.user}" berhasil disimpan!`, '✅');
         editingMarker = null;
       })
       .catch(error => {
-        console.error('Error updating PPPoE data:', error);
-        alert('Gagal menyimpan data: ' + error.message);
-        
-        // Re-enable tombol jika gagal
+        console.error('Error updating PPPoE:', error);
+        showNotification(`Gagal menyimpan data: ${error.message}`, '❌');
         if (saveBtn) {
           saveBtn.disabled = false;
-          saveBtn.innerHTML = '💾 Save';
+          saveBtn.innerHTML = '💾 Simpan';
         }
       });
   }
 
   function cancelPPPoEEdits(user) {
     if (!editingMarker) return;
-
-    // Cari data asli
     const markerKey = Object.keys(dataStore).find(key => dataStore[key].user === user);
     if (!markerKey) return;
 
     const originalData = dataStore[markerKey];
-    
-    // Kembali ke view mode
     editingMarker.setPopupContent(buildPopup(originalData, false));
     editingMarker = null;
   }
@@ -534,48 +1949,52 @@
     const odpInput = document.getElementById('edit-odp');
     if (odpInput && lastodp) {
       odpInput.value = lastodp;
-      console.log('ODP assigned:', lastodp);
+      showNotification(`ODP "${lastodp}" dimasukkan ke form`, '📍');
     } else if (!lastodp) {
-      alert('Pilih ODP terlebih dahulu dengan mengklik marker ODP!');
+      showNotification('Pilih ODP terlebih dahulu dengan mengklik titik ODP pada peta!', '⚠️');
     }
   }
 
   function deletePPPoE(user) {
     if (!user) return;
 
-    // Konfirmasi sebelum menghapus
-    const confirmed = confirm(`Apakah Anda yakin ingin menghapus PPPoE: ${user}?\n\nTindakan ini tidak dapat dibatalkan!`);
-    if (!confirmed) return;
+    showConfirmModal(
+      'Hapus PPPoE',
+      `Apakah Anda yakin ingin menghapus data pelanggan PPPoE: "${user}"?\nData yang dihapus tidak dapat dipulihkan.`,
+      () => {
+        const markerKey = Object.keys(dataStore).find(key => dataStore[key].user === user);
+        if (!markerKey) {
+          showNotification('Data PPPoE tidak ditemukan!', '⚠️');
+          return;
+        }
 
-    // Cari key marker berdasarkan user
-    const markerKey = Object.keys(dataStore).find(key => dataStore[key].user === user);
-    if (!markerKey) {
-      alert('Data PPPoE tidak ditemukan!');
-      return;
-    }
+        if (editingMarker && editingMarker.isPopupOpen && editingMarker.isPopupOpen()) {
+          editingMarker.closePopup();
+        }
 
-    // Close popup jika sedang terbuka
-    if (editingMarker && editingMarker.isPopupOpen && editingMarker.isPopupOpen()) {
-      editingMarker.closePopup();
-    }
-
-    // Hapus dari Firebase
-    ref.child(markerKey).remove()
-      .then(() => {
-        console.log('Data PPPoE berhasil dihapus:', user);
-        alert(`PPPoE "${user}" berhasil dihapus!`);
-      })
-      .catch(error => {
-        console.error('Error deleting PPPoE data:', error);
-        alert(`Gagal menghapus PPPoE: ${error.message}`);
-      });
+        ref.child(markerKey).remove()
+          .then(() => {
+            showNotification(`PPPoE "${user}" berhasil dihapus`, '🗑️');
+          })
+          .catch(error => {
+            console.error('Error deleting PPPoE:', error);
+            showNotification(`Gagal menghapus PPPoE: ${error.message}`, '❌');
+          });
+      },
+      'Hapus Klien',
+      true
+    );
   }
 
+  /**
+   * Search Suggestions & Debounce
+   */
   function updateSearchSuggestions() {
     const datalist = document.getElementById('combinedList');
+    if (!datalist) return;
     const options = new Set();
-    datalist.innerHTML = ''; 
-    
+    datalist.innerHTML = '';
+
     Object.values(dataStore).forEach(item => {
       if (item.fullname) options.add(item.fullname);
       if (item.user) options.add(item.user);
@@ -584,7 +2003,7 @@
     });
 
     options.forEach(val => {
-      let opt = document.createElement('option');
+      const opt = document.createElement('option');
       opt.value = val;
       datalist.appendChild(opt);
     });
@@ -598,6 +2017,9 @@
     };
   }
 
+  /**
+   * PPPoE Marker Placement & Movement with Clustering
+   */
   function addOrUpdateMarker(key, data) {
     if (!data.latitude || !data.longitude) return;
 
@@ -607,27 +2029,32 @@
     dataStore[key] = data;
     setIndex(key, data);
     updateSearchSuggestions();
+    updateCounters();
 
     const lat = parseFloat(data.latitude);
     const lng = parseFloat(data.longitude);
+    if (isNaN(lat) || isNaN(lng)) return;
+
     const icon = (data.online == 1 || data.status == 1) ? onlineIcon : offlineIcon;
-    const hasACS = (data.ACS && data.ACS !== "" && data.ACS !== "0");
-    const targetLayer = hasACS ? layerWithACS : layerNoACS;
 
     if (markers[key]) {
       markers[key].setLatLng([lat, lng]).setIcon(icon).setPopupContent(buildPopup(data, false));
-      if (markers[key]._currentLayer !== targetLayer) {
-        markers[key]._currentLayer.removeLayer(markers[key]);
-        targetLayer.addLayer(markers[key]);
-        markers[key]._currentLayer = targetLayer;
-      }
       if (!markers[key].dragging.enabled()) {
         markers[key].dragging.enable();
       }
-      
-      // Reset editing state jika marker ini sedang diedit
       if (editingMarker === markers[key]) {
         editingMarker = null;
+      }
+      // Re-evaluate filter visibility
+      if (matchesCurrentFilter(data)) {
+        if (useClustering && !clusterGroup.hasLayer(markers[key])) {
+          clusterGroup.addLayer(markers[key]);
+        } else if (!useClustering && !nonClusterGroup.hasLayer(markers[key])) {
+          nonClusterGroup.addLayer(markers[key]);
+        }
+      } else {
+        clusterGroup.removeLayer(markers[key]);
+        nonClusterGroup.removeLayer(markers[key]);
       }
     } else {
       const m = L.marker([lat, lng], { icon, draggable: true })
@@ -636,43 +2063,61 @@
           const newLatLng = event.target.getLatLng();
           const originalLatLng = L.latLng(lat, lng);
           const label = data.user || data.fullname || key;
-          const confirmed = confirm(`Yakin ingin memindahkan marker ${label} ke ${newLatLng.lat.toFixed(6)}, ${newLatLng.lng.toFixed(6)}?`);
 
-          if (!confirmed) {
+          showConfirmModal(
+            'Pindahkan Lokasi Marker',
+            `Geser marker "${label}" ke koordinat:\n${newLatLng.lat.toFixed(6)}, ${newLatLng.lng.toFixed(6)}?`,
+            () => {
+              const currentData = dataStore[key] || data;
+              const updatedData = { ...currentData, latitude: newLatLng.lat.toString(), longitude: newLatLng.lng.toString() };
+              addOrUpdateMarker(key, updatedData);
+              ref.child(key).update({ latitude: newLatLng.lat, longitude: newLatLng.lng })
+                .then(() => {
+                  showNotification(`Lokasi "${label}" berhasil dipindahkan`, '📍');
+                });
+            },
+            'Simpan Posisi Baru',
+            false
+          );
+
+          const cancelBtn = document.getElementById('modalCancelBtn');
+          const prevCancel = cancelBtn.onclick;
+          cancelBtn.onclick = () => {
             event.target.setLatLng(originalLatLng);
-            document.getElementById('notifBar').innerText = `Perubahan lokasi marker ${label} dibatalkan.`;
-            return;
-          }
-
-          const currentData = dataStore[key] || data;
-          const updatedData = { ...currentData, latitude: newLatLng.lat.toString(), longitude: newLatLng.lng.toString() };
-          addOrUpdateMarker(key, updatedData);
-          ref.child(key).update({ latitude: newLatLng.lat, longitude: newLatLng.lng });
-          document.getElementById('notifBar').innerText = `Marker ${label} dipindahkan ke ${newLatLng.lat.toFixed(6)}, ${newLatLng.lng.toFixed(6)}`;
+            showNotification(`Perubahan posisi "${label}" dibatalkan`);
+            if (prevCancel) prevCancel();
+          };
         });
-      m._currentLayer = targetLayer;
-      targetLayer.addLayer(m);
+
       markers[key] = m;
+      if (matchesCurrentFilter(data)) {
+        if (useClustering) {
+          clusterGroup.addLayer(m);
+        } else {
+          nonClusterGroup.addLayer(m);
+        }
+      }
     }
 
-    // Update koneksi ke ODP jika ada yang di-assign
     updateConnectionForPPPoE(key, data);
   }
 
+  /**
+   * Search Execution with Cluster Zooming
+   */
   function performSearch(query) {
-    let val = query.toLowerCase().trim();
+    let val = (query || '').toLowerCase().trim();
     if (!val) return;
     if (val.startsWith("ssid: ")) val = val.replace("ssid: ", "");
     if (val.startsWith("odp: ")) val = val.replace("odp: ", "");
 
     const keyExact = indexByUser[val] || indexByFullname[val] || indexBySSID[val];
     if (keyExact && markers[keyExact]) {
-      map.setView(markers[keyExact].getLatLng(), 18);
-      markers[keyExact].openPopup();
+      focusMarker(markers[keyExact]);
+      showNotification(`Menemukan: ${val}`, '🎯');
       return;
     }
 
-    // Fallback: pencarian parsial jika tidak ada yang cocok persis
     for (const key in markers) {
       const d = dataStore[key];
       if (
@@ -681,25 +2126,58 @@
         (d.ssid && d.ssid.toLowerCase().includes(val)) ||
         (d.odp && d.odp.toLowerCase().includes(val))
       ) {
-        map.setView(markers[key].getLatLng(), 18);
-        markers[key].openPopup();
+        focusMarker(markers[key]);
+        showNotification(`Menemukan hasil untuk: ${val}`, '🎯');
         return;
       }
     }
+
+    showNotification(`Tidak ada hasil untuk: "${val}"`, '🔍');
   }
 
-  document.getElementById('searchInput').addEventListener('input', debounce(function(e) {
+  function focusMarker(marker) {
+    if (useClustering && clusterGroup.hasLayer(marker)) {
+      clusterGroup.zoomToShowLayer(marker, () => {
+        marker.openPopup();
+      });
+    } else {
+      map.setView(marker.getLatLng(), 18);
+      marker.openPopup();
+    }
+  }
+
+  const searchInput = document.getElementById('searchInput');
+  const clearSearchBtn = document.getElementById('clearSearchBtn');
+
+  searchInput.addEventListener('input', function(e) {
+    if (clearSearchBtn) {
+      clearSearchBtn.style.display = e.target.value ? 'block' : 'none';
+    }
+  });
+
+  searchInput.addEventListener('input', debounce(function(e) {
     performSearch(e.target.value);
   }, 180));
 
-  document.getElementById('searchInput').addEventListener('keypress', function(e) {
+  searchInput.addEventListener('keypress', function(e) {
     if (e.key === 'Enter') performSearch(this.value);
   });
 
+  if (clearSearchBtn) {
+    clearSearchBtn.addEventListener('click', function() {
+      searchInput.value = '';
+      clearSearchBtn.style.display = 'none';
+      searchInput.focus();
+    });
+  }
+
+  /**
+   * Firebase Database Subscriptions
+   */
   ref.on('child_added', snap => addOrUpdateMarker(snap.key, snap.val()));
+  
   ref.on('child_changed', snap => {
     addOrUpdateMarker(snap.key, snap.val());
-    // Update popup ODP jika ada perubahan koneksi
     setTimeout(() => {
       Object.keys(odpMarkers).forEach(odpKey => {
         const odpData = odpDataStore[odpKey];
@@ -709,19 +2187,21 @@
       });
     }, 100);
   });
+
   ref.on('child_removed', snap => {
     if (markers[snap.key]) {
-      markers[snap.key]._currentLayer.removeLayer(markers[snap.key]);
+      clusterGroup.removeLayer(markers[snap.key]);
+      nonClusterGroup.removeLayer(markers[snap.key]);
       delete markers[snap.key];
     }
     if (dataStore[snap.key]) {
       clearIndex(snap.key, dataStore[snap.key]);
       delete dataStore[snap.key];
       updateSearchSuggestions();
+      updateCounters();
+      populateOdpSelect();
     }
-    // Hapus koneksi yang terkait
     removeConnection(snap.key);
-    // Update popup ODP setelah penghapusan
     setTimeout(() => {
       Object.keys(odpMarkers).forEach(odpKey => {
         const odpData = odpDataStore[odpKey];
@@ -734,103 +2214,260 @@
 
   odpRef.on('child_added', snap => {
     addOrUpdateOdpMarker(snap.key, snap.val());
-    // Update semua koneksi PPPoE yang terhubung ke ODP ini
     setTimeout(updateAllConnectionsFromODP, 50);
   });
+
   odpRef.on('child_changed', snap => {
     addOrUpdateOdpMarker(snap.key, snap.val());
-    // Update semua koneksi PPPoE yang terhubung ke ODP ini
     setTimeout(updateAllConnectionsFromODP, 50);
   });
+
   odpRef.on('child_removed', snap => {
     if (odpMarkers[snap.key]) {
       layerODP.removeLayer(odpMarkers[snap.key]);
       delete odpMarkers[snap.key];
       delete odpDataStore[snap.key];
+      updateCounters();
+      populateOdpSelect();
     }
-    // Update semua koneksi PPPoE
     setTimeout(updateAllConnectionsFromODP, 50);
   });
 
-  document.getElementById('fitAll').addEventListener('click', () => {
+  /**
+   * Fit All Action
+   */
+  function fitAllPoints() {
     const pppoeLatlngs = Object.values(markers).map(m => m.getLatLng());
     const odpLatlngs = Object.values(odpMarkers).map(m => m.getLatLng());
     const allLatlngs = [...pppoeLatlngs, ...odpLatlngs];
     
-    if (allLatlngs.length > 0) map.fitBounds(L.latLngBounds(allLatlngs).pad(0.1));
+    if (allLatlngs.length > 0) {
+      map.fitBounds(L.latLngBounds(allLatlngs).pad(0.08));
+      showNotification(`Memusatkan ${allLatlngs.length} titik perangkat`, '🔍');
+    } else {
+      showNotification('Belum ada titik perangkat yang dimuat', '⚠️');
+    }
+  }
+
+  document.getElementById('fitAll').addEventListener('click', fitAllPoints);
+  document.getElementById('sideFitAll').addEventListener('click', () => {
+    fitAllPoints();
+    closeSidebar();
   });
 
   function updateACS(id) {
-    fetch(`http://192.168.18.1:5678/webhook/production/?devid=${id}`)
-      .then(() => alert('Update ACS diproses untuk: ' + id))
-      .catch(() => alert('Gagal terhubung ke server webhook.'));
+    showNotification(`Memproses update ACS untuk ${id}...`, '⏳');
+
+    const mode = appSettings.acsTriggerMode || DEFAULT_SETTINGS.acsTriggerMode;
+
+    if (mode === 'rest_7557') {
+      // GenieACS Direct REST API (NBI) on Port 7557
+      const nbiBase = (appSettings.genieAcsNbiUrl || DEFAULT_SETTINGS.genieAcsNbiUrl).replace(/\/+$/, '');
+      const taskEndpoint = `${nbiBase}/devices/${encodeURIComponent(id)}/tasks?connection_request`;
+
+      fetch(taskEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'refreshObject', objectName: '' })
+      })
+      .then(res => {
+        if (res.ok || res.status === 200 || res.status === 202) {
+          showNotification(`Task refresh GenieACS (Port 7557) terkirim untuk: ${id}`, '✅');
+        } else {
+          showNotification(`GenieACS REST (7557) merespons status ${res.status}. Pastikan ID perangkat sesuai.`, 'ℹ️');
+        }
+      })
+      .catch(err => {
+        console.warn('GenieACS REST 7557 fetch error:', err);
+        showNotification(`Gagal terhubung ke REST API Port 7557 (${nbiBase}). Pastikan GenieACS NBI aktif di LAN/VPN.`, '⚠️');
+      });
+    } else {
+      // Custom Webhook (e.g. n8n or middleware port 5678)
+      const webhookSetting = appSettings.genieAcsWebhook || DEFAULT_SETTINGS.genieAcsWebhook;
+      const endpoint = webhookSetting.endsWith('=')
+        ? `${webhookSetting}${encodeURIComponent(id)}`
+        : `${webhookSetting.replace(/\/+$/, '')}/webhook/production/?devid=${encodeURIComponent(id)}`;
+
+      fetch(endpoint)
+        .then(() => showNotification(`Update ACS webhook berhasil dikirim untuk: ${id}`, '✅'))
+        .catch(() => showNotification(`Gagal terhubung ke webhook ACS. Periksa URL di Pengaturan.`, '⚠️'));
+    }
   }
 
+  /**
+   * System Settings Modal Management
+   */
+  const settingsModal = document.getElementById('settingsModal');
+
+  function openSettingsModal() {
+    document.getElementById('settingAcsMode').value = appSettings.acsTriggerMode || DEFAULT_SETTINGS.acsTriggerMode;
+    document.getElementById('settingGenieAcsNbi').value = appSettings.genieAcsNbiUrl || DEFAULT_SETTINGS.genieAcsNbiUrl;
+    document.getElementById('settingGenieAcsUrl').value = appSettings.genieAcsUrl || DEFAULT_SETTINGS.genieAcsUrl;
+    document.getElementById('settingGenieAcsWebhook').value = appSettings.genieAcsWebhook || DEFAULT_SETTINGS.genieAcsWebhook;
+    document.getElementById('settingTileUrl').value = appSettings.tileLayerUrl || DEFAULT_SETTINGS.tileLayerUrl;
+    document.getElementById('settingDefaultLat').value = appSettings.defaultLat || DEFAULT_SETTINGS.defaultLat;
+    document.getElementById('settingDefaultLng').value = appSettings.defaultLng || DEFAULT_SETTINGS.defaultLng;
+    document.getElementById('settingDefaultZoom').value = appSettings.defaultZoom || DEFAULT_SETTINGS.defaultZoom;
+    document.getElementById('settingClusterRadius').value = appSettings.clusterRadius || DEFAULT_SETTINGS.clusterRadius;
+    document.getElementById('settingLineWidth').value = appSettings.connectionLineWidth || DEFAULT_SETTINGS.connectionLineWidth;
+
+    settingsModal.style.display = 'flex';
+  }
+
+  function closeSettingsModal() {
+    settingsModal.style.display = 'none';
+  }
+
+  function updateGenieAcsUI() {
+    const hostUrl = appSettings.genieAcsUrl || DEFAULT_SETTINGS.genieAcsUrl;
+    const nbiUrl = appSettings.genieAcsNbiUrl || DEFAULT_SETTINGS.genieAcsNbiUrl;
+    const cleanHost = hostUrl.replace(/^https?:\/\//, '').replace(/\/+$/, '');
+
+    const labelHost = document.getElementById('labelGenieAcsUrl');
+    if (labelHost) labelHost.innerText = cleanHost;
+
+    const labelNbi = document.getElementById('labelGenieAcsNbi');
+    if (labelNbi) labelNbi.innerText = nbiUrl.includes(':7557') ? 'Port 7557' : nbiUrl;
+
+    const linkGui = document.getElementById('linkGenieAcsGui');
+    if (linkGui) linkGui.href = hostUrl;
+  }
+
+  function saveSettings() {
+    const newAcsMode = document.getElementById('settingAcsMode').value;
+    const newNbiUrl = document.getElementById('settingGenieAcsNbi').value.trim() || DEFAULT_SETTINGS.genieAcsNbiUrl;
+    const newAcsUrl = document.getElementById('settingGenieAcsUrl').value.trim() || DEFAULT_SETTINGS.genieAcsUrl;
+    const newWebhook = document.getElementById('settingGenieAcsWebhook').value.trim() || DEFAULT_SETTINGS.genieAcsWebhook;
+    const newTileUrl = document.getElementById('settingTileUrl').value.trim() || DEFAULT_SETTINGS.tileLayerUrl;
+    const newLat = parseFloat(document.getElementById('settingDefaultLat').value) || DEFAULT_SETTINGS.defaultLat;
+    const newLng = parseFloat(document.getElementById('settingDefaultLng').value) || DEFAULT_SETTINGS.defaultLng;
+    const newZoom = parseInt(document.getElementById('settingDefaultZoom').value, 10) || DEFAULT_SETTINGS.defaultZoom;
+    const newRadius = parseInt(document.getElementById('settingClusterRadius').value, 10) || DEFAULT_SETTINGS.clusterRadius;
+    const newLineWidth = parseInt(document.getElementById('settingLineWidth').value, 10) || DEFAULT_SETTINGS.connectionLineWidth;
+
+    appSettings = {
+      acsTriggerMode: newAcsMode,
+      genieAcsNbiUrl: newNbiUrl,
+      genieAcsUrl: newAcsUrl,
+      genieAcsWebhook: newWebhook,
+      tileLayerUrl: newTileUrl,
+      defaultLat: newLat,
+      defaultLng: newLng,
+      defaultZoom: newZoom,
+      clusterRadius: newRadius,
+      connectionLineWidth: newLineWidth
+    };
+
+    localStorage.setItem('wifi_map_settings', JSON.stringify(appSettings));
+
+    // Update tile server layer
+    if (baseOSM && baseOSM.setUrl) {
+      baseOSM.setUrl(appSettings.tileLayerUrl);
+    }
+
+    // Redraw connections with updated line width
+    updateAllConnectionsFromODP();
+
+    // Update UI references
+    updateGenieAcsUI();
+
+    closeSettingsModal();
+    showNotification('Pengaturan berhasil disimpan dan diterapkan!', '✅');
+  }
+
+  function resetSettings() {
+    showConfirmModal(
+      'Reset Pengaturan',
+      'Kembalikan seluruh konfigurasi GenieACS (REST Port 7557), Tile Server, dan Tampilan ke nilai default?',
+      () => {
+        appSettings = { ...DEFAULT_SETTINGS };
+        localStorage.removeItem('wifi_map_settings');
+        openSettingsModal();
+        if (baseOSM && baseOSM.setUrl) {
+          baseOSM.setUrl(DEFAULT_SETTINGS.tileLayerUrl);
+        }
+        updateAllConnectionsFromODP();
+        updateGenieAcsUI();
+        showNotification('Pengaturan direset ke default pabrik', '🔄');
+      },
+      'Reset Default',
+      true
+    );
+  }
+
+  // Event Listeners for Settings Modal
+  document.getElementById('btnTopSettings').addEventListener('click', openSettingsModal);
+  document.getElementById('btnSideSettings').addEventListener('click', () => {
+    closeSidebar();
+    openSettingsModal();
+  });
+  document.getElementById('btnCloseSettings').addEventListener('click', closeSettingsModal);
+  document.getElementById('btnCancelSettings').addEventListener('click', closeSettingsModal);
+  document.getElementById('btnSaveSettings').addEventListener('click', saveSettings);
+  document.getElementById('btnResetSettings').addEventListener('click', resetSettings);
+
+  // Initialize UI with settings
+  updateGenieAcsUI();
+
   // Basemap Switcher Logic
-  document.getElementById('basemapSelect').addEventListener('change', function(e) {
-    if(e.target.value === 'osm') {
+  function setBasemap(val) {
+    if (val === 'osm') {
       map.addLayer(baseOSM);
       map.removeLayer(baseEsriSat);
+      showNotification('Peta Dasar: Map TKJ Sakti', '🗺️');
     } else {
       map.addLayer(baseEsriSat);
       map.removeLayer(baseOSM);
+      showNotification('Peta Dasar: Esri Satellite', '🛰️');
     }
-  });
+    const sideSelect = document.getElementById('sideBasemapSelect');
+    if (sideSelect && sideSelect.value !== val) sideSelect.value = val;
+  }
 
-  // Clear ODP Selection
-  document.getElementById('clearOdpSelection').addEventListener('click', function() {
-    lastodp = null;
-    // Reset notifikasi ke status awal
-    const hasServiceWorker = 'serviceWorker' in navigator;
-    document.getElementById('notifBar').innerText = hasServiceWorker ? 'Ready (Offline mode enabled)' : 'Ready';
-    console.log('ODP selection cleared');
+  document.getElementById('sideBasemapSelect').addEventListener('change', function(e) {
+    setBasemap(e.target.value);
   });
 
   // Show Connected PPPoE
   document.getElementById('showConnectedPPPoE').addEventListener('click', function() {
     if (!lastodp) {
-      alert('Pilih ODP terlebih dahulu dengan mengklik marker ODP!');
+      showNotification('Klik salah satu titik ODP terlebih dahulu pada peta!', '⚠️');
+      openSidebar();
       return;
     }
 
-    // Cari semua PPPoE yang terhubung ke ODP ini
     const connectedPPPoE = Object.entries(dataStore).filter(([key, pppoe]) => pppoe.odp === lastodp);
     
     if (connectedPPPoE.length === 0) {
-      alert(`Tidak ada PPPoE yang terhubung ke ODP: ${lastodp}`);
+      showNotification(`Tidak ada PPPoE yang terhubung ke ODP: "${lastodp}"`, 'ℹ️');
       return;
     }
 
-    // Zoom ke area yang mencakup semua PPPoE terhubung
     const latlngs = connectedPPPoE.map(([key, pppoe]) => 
       [parseFloat(pppoe.latitude), parseFloat(pppoe.longitude)]
     );
     
     if (latlngs.length > 0) {
-      map.fitBounds(L.latLngBounds(latlngs).pad(0.1));
+      map.fitBounds(L.latLngBounds(latlngs).pad(0.12));
     }
 
-    // Buka popup untuk PPPoE pertama
     const firstPPPoE = connectedPPPoE[0];
     if (markers[firstPPPoE[0]]) {
-      markers[firstPPPoE[0]].openPopup();
+      focusMarker(markers[firstPPPoE[0]]);
     }
 
-    console.log(`Menampilkan ${connectedPPPoE.length} PPPoE terhubung ke ODP: ${lastodp}`);
-    document.getElementById('notifBar').innerText = `Menampilkan ${connectedPPPoE.length} PPPoE terhubung ke ${lastodp}`;
+    showNotification(`Menampilkan ${connectedPPPoE.length} PPPoE pada ${lastodp}`, '🔗');
   });
 
-  // Register Service Worker untuk tile caching offline
+  // Service Worker Registration
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('/sw.js')
         .then(reg => {
-          console.log('[App] Service Worker registered:', reg.scope);
-          document.getElementById('notifBar').innerText = 'Ready (Offline mode enabled)';
+          console.log('[App] Service Worker terpasang:', reg.scope);
         })
         .catch(err => {
-          console.error('[App] Service Worker registration failed:', err);
-          document.getElementById('notifBar').innerText = 'Ready (Offline mode unavailable)';
+          console.warn('[App] Service Worker gagal terpasang:', err);
         });
     });
   }

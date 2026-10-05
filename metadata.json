@@ -1,0 +1,8 @@
+{
+  "name": "PPPoE Live Monitor",
+  "description": "Interactive PPPoE live monitor and fiber ODP network map with search and real-time status tracking.",
+  "permissions": [],
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
