@@ -987,6 +987,24 @@
             <input type="text" id="settingGenieAcsWebhook" placeholder="http://192.168.18.243:5678/webhook/production/?devid=" />
             <small style="font-size:10px; color:#64748b;">Digunakan bila memakai alur webhook khusus seperti n8n</small>
           </div>
+
+          <!-- CORS Proxy Option for web hosting like GitHub Pages -->
+          <div style="margin-top:8px; padding:10px; background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <input type="checkbox" id="settingUseCorsProxy" style="width:16px; height:16px; cursor:pointer;" />
+              <label for="settingUseCorsProxy" style="font-weight:700; color:#1e40af; cursor:pointer; font-size:12px; margin:0;">
+                Bypass CORS Proxy (Wajib untuk GitHub Pages / Luar LAN)
+              </label>
+            </div>
+            <div id="corsProxyInputGroup" style="margin-top:6px;">
+              <label style="font-size:11px; color:#475569; font-weight:600;">Prefix CORS Proxy:</label>
+              <input type="text" id="settingCorsProxyUrl" placeholder="https://corsproxy.io/?url=" style="font-size:11px;" />
+              <small style="font-size:10px; color:#64748b; display:block; margin-top:2px;">
+                Mencegah error <i>"blocked by CORS policy"</i> saat fetch API GenieACS dari domain web hosting.
+              </small>
+            </div>
+          </div>
+
           <div style="margin-top:8px; padding-top:6px; border-top:1px dashed #cbd5e1;">
             <a href="https://docs.genieacs.com/en/latest/api-reference.html" target="_blank" style="font-size:11px; color:#2563eb; text-decoration:none; display:inline-flex; align-items:center; gap:4px; font-weight:600;">
               📖 Dokumentasi Resmi GenieACS API Reference ↗
@@ -1038,6 +1056,24 @@
               <label>Tebal Garis Koneksi:</label>
               <input type="number" id="settingLineWidth" min="1" max="6" value="2" />
             </div>
+          </div>
+        </div>
+
+        <!-- Group 4: Penyimpanan Lokal & Cache Offline -->
+        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:12px;">
+          <h4 style="margin:0 0 8px 0; font-size:13px; font-weight:700; color:#1e293b; display:flex; align-items:center; gap:6px;">
+            💾 Penyimpanan Lokal &amp; Cache Peta Offline
+          </h4>
+          <p style="margin:0 0 8px 0; font-size:11px; color:#475569; line-height:1.4;">
+            Tile peta (TKJ Sakti / OSM) dan data titik jaringan tersimpan otomatis ke memori lokal peramban (Cache Storage &amp; LocalStorage). Peta terbuka instan, hemat kuota, dan tetap tampil saat offline.
+          </p>
+          <div style="display:flex; flex-wrap:wrap; gap:6px;">
+            <button type="button" class="ui-btn" id="btnSaveDataSnapshot" style="width:auto; font-size:11px; padding:6px 10px;">
+              📥 Simpan Data Sekarang
+            </button>
+            <button type="button" class="ui-btn ui-btn-danger" id="btnClearTileCache" style="width:auto; font-size:11px; padding:6px 10px;">
+              🧹 Bersihkan Cache Tile Peta
+            </button>
           </div>
         </div>
       </div>
@@ -1211,11 +1247,17 @@
   /**
    * System Settings Configuration (GenieACS, Map, Clustering)
    */
+  const isHostedWeb = typeof window !== 'undefined' && 
+    window.location.hostname !== 'localhost' && 
+    window.location.hostname !== '127.0.0.1';
+
   const DEFAULT_SETTINGS = {
     genieAcsUrl: 'http://192.168.18.243/',
     genieAcsNbiUrl: 'http://192.168.18.243:7557',
     acsTriggerMode: 'rest_7557', // 'rest_7557' (Port 7557 REST API) | 'webhook_custom'
     genieAcsWebhook: 'http://192.168.18.243:5678/webhook/production/?devid=',
+    useCorsProxy: isHostedWeb,
+    corsProxyUrl: 'https://corsproxy.io/?url=',
     tileLayerUrl: 'https://map.tkjsakti.my.id/map.php?lyrs=s&z={z}&x={x}&y={y}',
     defaultLat: -7.14,
     defaultLng: 110.95,
@@ -1287,10 +1329,30 @@
   const layerODP = L.layerGroup();
   const layerConnections = L.layerGroup();
 
+  const savedView = (() => {
+    try {
+      const v = localStorage.getItem('map_last_view');
+      if (v) return JSON.parse(v);
+    } catch (e) {}
+    return null;
+  })();
+
+  const initialLat = savedView ? savedView.lat : (appSettings.defaultLat || -7.14);
+  const initialLng = savedView ? savedView.lng : (appSettings.defaultLng || 110.95);
+  const initialZoom = savedView ? savedView.zoom : (appSettings.defaultZoom || 14);
+
   const map = L.map('map', { 
     layers: [baseOSM, clusterGroup, layerODP, layerConnections],
     zoomControl: false
-  }).setView([appSettings.defaultLat || -7.14, appSettings.defaultLng || 110.95], appSettings.defaultZoom || 14);
+  }).setView([initialLat, initialLng], initialZoom);
+
+  map.on('moveend', () => {
+    try {
+      const center = map.getCenter();
+      const zoom = map.getZoom();
+      localStorage.setItem('map_last_view', JSON.stringify({ lat: center.lat, lng: center.lng, zoom: zoom }));
+    } catch (e) {}
+  });
 
   L.control.zoom({ position: 'bottomright' }).addTo(map);
 
@@ -1804,6 +1866,7 @@
       layerODP.addLayer(m);
       odpMarkers[key] = m;
     }
+    scheduleSaveToLocalStorage();
   }
 
   function buildOdpPopup(item) {
@@ -2175,6 +2238,7 @@
     }
 
     updateConnectionForPPPoE(key, data);
+    scheduleSaveToLocalStorage();
   }
 
   /**
@@ -2245,6 +2309,57 @@
       searchInput.focus();
     });
   }
+
+  /**
+   * LocalStorage Persistent Network Data (PPPoE & ODP)
+   */
+  let saveLocalTimeout = null;
+  function scheduleSaveToLocalStorage() {
+    clearTimeout(saveLocalTimeout);
+    saveLocalTimeout = setTimeout(() => {
+      try {
+        localStorage.setItem('cached_pppoe_data', JSON.stringify(dataStore));
+        localStorage.setItem('cached_odp_data', JSON.stringify(odpDataStore));
+      } catch (e) {
+        console.warn('Quota localStorage terlampaui saat menyimpan data:', e);
+      }
+    }, 1200);
+  }
+
+  function loadCachedNetworkData() {
+    try {
+      const odpRaw = localStorage.getItem('cached_odp_data');
+      const pppoeRaw = localStorage.getItem('cached_pppoe_data');
+      let loadedPppoe = 0;
+      let loadedOdp = 0;
+
+      if (odpRaw) {
+        const parsedOdp = JSON.parse(odpRaw);
+        Object.entries(parsedOdp).forEach(([key, val]) => {
+          addOrUpdateOdpMarker(key, val);
+          loadedOdp++;
+        });
+      }
+
+      if (pppoeRaw) {
+        const parsedPppoe = JSON.parse(pppoeRaw);
+        Object.entries(parsedPppoe).forEach(([key, val]) => {
+          addOrUpdateMarker(key, val);
+          loadedPppoe++;
+        });
+      }
+
+      if (loadedPppoe > 0 || loadedOdp > 0) {
+        updateAllConnectionsFromODP();
+        showNotification(`Memuat ${loadedPppoe} klien & ${loadedOdp} ODP dari penyimpanan lokal`, '⚡');
+      }
+    } catch (err) {
+      console.warn('Gagal memuat cache lokal:', err);
+    }
+  }
+
+  // Pre-load data from LocalStorage instantly before Firebase connects
+  loadCachedNetworkData();
 
   /**
    * Firebase Database Subscriptions
@@ -2374,6 +2489,42 @@
     genieAcsModal.style.display = 'none';
   }
 
+  /**
+   * CORS Proxy & Network Fallback Helper
+   * Resolves: "blocked by CORS policy: No 'Access-Control-Allow-Origin' header"
+   * especially when app is accessed from GitHub Pages (tutorajaib.github.io)
+   */
+  async function fetchWithCorsFallback(url, options = {}) {
+    const proxyPrefix = (appSettings.corsProxyUrl || DEFAULT_SETTINGS.corsProxyUrl).trim();
+    const shouldForceProxy = Boolean(appSettings.useCorsProxy);
+
+    // 1. If CORS proxy is enabled, use proxy directly
+    if (shouldForceProxy && proxyPrefix) {
+      const proxyUrl = `${proxyPrefix}${encodeURIComponent(url)}`;
+      try {
+        const res = await fetch(proxyUrl, options);
+        return { res, viaProxy: true };
+      } catch (err) {
+        console.warn('[CORS] Proxy request failed, falling back to direct:', err);
+      }
+    }
+
+    // 2. Try direct fetch
+    try {
+      const res = await fetch(url, options);
+      return { res, viaProxy: false };
+    } catch (err) {
+      // 3. Direct fetch failed (typically TypeError on CORS preflight without Access-Control-Allow-Origin)
+      console.warn('[CORS] Direct fetch failed. Retrying via CORS Proxy fallback...', err);
+      if (proxyPrefix) {
+        const proxyUrl = `${proxyPrefix}${encodeURIComponent(url)}`;
+        const res = await fetch(proxyUrl, options);
+        return { res, viaProxy: true };
+      }
+      throw err;
+    }
+  }
+
   // Official GenieACS Task Sender (POST /devices/<device_id>/tasks?[connection_request])
   function sendGenieAcsTask(taskObject, actionLabel) {
     const targetId = detectedDeviceId || currentAcsUser;
@@ -2387,13 +2538,13 @@
     const nbiHost = (appSettings.genieAcsNbiUrl || DEFAULT_SETTINGS.genieAcsNbiUrl).replace(/\/+$/, '');
     const taskEndpoint = `${nbiHost}/devices/${encodeURIComponent(targetId)}/tasks?connection_request`;
 
-    fetch(taskEndpoint, {
+    fetchWithCorsFallback(taskEndpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(taskObject)
     })
-    .then(async (res) => {
-      const statusText = `HTTP ${res.status} ${res.statusText}`;
+    .then(async ({ res, viaProxy }) => {
+      const statusText = `HTTP ${res.status} ${res.statusText}${viaProxy ? ' [via CORS Bypass]' : ''}`;
       let responseBody = '';
       try {
         const json = await res.json();
@@ -2405,7 +2556,7 @@
       if (res.ok || res.status === 200 || res.status === 202) {
         const msg = `${statusText} - Sukses!\n${actionLabel} berhasil diproses oleh GenieACS.\nTask Object:\n${responseBody}`;
         logAcsResponse(msg, true);
-        showNotification(`${actionLabel} berhasil dikirim!`, '✅');
+        showNotification(`${actionLabel} berhasil dikirim!${viaProxy ? ' (Bypass CORS)' : ''}`, '✅');
       } else {
         const msg = `${statusText} - Gagal.\nRespon server:\n${responseBody}`;
         logAcsResponse(msg, false);
@@ -2414,8 +2565,8 @@
     })
     .catch(err => {
       console.warn('GenieACS Task Error:', err);
-      logAcsResponse(`Gagal terhubung ke REST API Port 7557 (${nbiHost}).\nError: ${err.message}\nPastikan NBI aktif dan diizinkan di jaringan.`, false);
-      showNotification(`Gagal terhubung ke REST Port 7557`, '⚠️');
+      logAcsResponse(`Gagal terhubung ke REST API Port 7557 (${nbiHost}).\nError: ${err.message}\nCatatan: Jika server GenieACS memblokir CORS dari browser, aktifkan 'Bypass CORS Proxy' di Pengaturan.`, false);
+      showNotification(`Gagal terhubung ke REST Port 7557 (CORS / Network)`, '⚠️');
     });
   }
 
@@ -2438,8 +2589,8 @@
       logAcsResponse(`Mengambil status perangkat dari GenieACS...\nGET /devices/?query=${JSON.stringify(queryObj)}`);
     }
 
-    fetch(queryUrl)
-      .then(res => res.json())
+    fetchWithCorsFallback(queryUrl)
+      .then(({ res }) => res.json())
       .then(devices => {
         if (devices && devices.length > 0) {
           const dev = devices[0];
@@ -2504,8 +2655,8 @@
 
       showNotification(`Mengirim ke Webhook ACS: ${endpoint}...`, '⏳');
 
-      fetch(endpoint)
-        .then(() => showNotification(`Update ACS berhasil dikirim ke webhook: ${endpoint}`, '✅'))
+      fetchWithCorsFallback(endpoint)
+        .then(({ viaProxy }) => showNotification(`Update ACS berhasil dikirim ke webhook: ${endpoint}${viaProxy ? ' (via Proxy)' : ''}`, '✅'))
         .catch(err => {
           console.warn('Webhook ACS error:', err);
           showNotification(`Gagal terhubung ke webhook (${endpoint}). Periksa URL di Pengaturan.`, '⚠️');
@@ -2517,14 +2668,14 @@
 
       showNotification(`Mengirim refresh ke GenieACS: ${taskEndpoint}...`, '⏳');
 
-      fetch(taskEndpoint, {
+      fetchWithCorsFallback(taskEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: 'refreshObject', objectName: '' })
       })
-      .then(async (res) => {
+      .then(async ({ res, viaProxy }) => {
         if (res.ok || res.status === 200 || res.status === 202) {
-          showNotification(`Update ACS BERHASIL [${res.status}] untuk: ${id} di ${nbiHost}`, '✅');
+          showNotification(`Update ACS BERHASIL [${res.status}] untuk: ${id}${viaProxy ? ' (Bypass CORS)' : ''}`, '✅');
         } else {
           showNotification(`GenieACS (${nbiHost}) respons status ${res.status}. Membuka panel kontrol...`, 'ℹ️');
           openGenieAcsModal(id);
@@ -2532,7 +2683,7 @@
       })
       .catch(err => {
         console.warn('GenieACS REST 7557 error:', err);
-        showNotification(`Gagal terhubung ke ${nbiHost}. Membuka panel kontrol ACS...`, '⚠️');
+        showNotification(`CORS / Network Block ke ${nbiHost}. Membuka panel kontrol ACS...`, '⚠️');
         openGenieAcsModal(id);
       });
     }
@@ -2553,6 +2704,10 @@
     document.getElementById('settingGenieAcsNbi').value = appSettings.genieAcsNbiUrl || DEFAULT_SETTINGS.genieAcsNbiUrl;
     document.getElementById('settingGenieAcsUrl').value = appSettings.genieAcsUrl || DEFAULT_SETTINGS.genieAcsUrl;
     document.getElementById('settingGenieAcsWebhook').value = appSettings.genieAcsWebhook || DEFAULT_SETTINGS.genieAcsWebhook;
+    document.getElementById('settingUseCorsProxy').checked = (appSettings.useCorsProxy !== undefined) 
+      ? Boolean(appSettings.useCorsProxy) 
+      : DEFAULT_SETTINGS.useCorsProxy;
+    document.getElementById('settingCorsProxyUrl').value = appSettings.corsProxyUrl || DEFAULT_SETTINGS.corsProxyUrl;
     document.getElementById('settingTileUrl').value = appSettings.tileLayerUrl || DEFAULT_SETTINGS.tileLayerUrl;
     document.getElementById('settingDefaultLat').value = appSettings.defaultLat || DEFAULT_SETTINGS.defaultLat;
     document.getElementById('settingDefaultLng').value = appSettings.defaultLng || DEFAULT_SETTINGS.defaultLng;
@@ -2587,6 +2742,8 @@
     const newNbiUrl = document.getElementById('settingGenieAcsNbi').value.trim() || DEFAULT_SETTINGS.genieAcsNbiUrl;
     const newAcsUrl = document.getElementById('settingGenieAcsUrl').value.trim() || DEFAULT_SETTINGS.genieAcsUrl;
     const newWebhook = document.getElementById('settingGenieAcsWebhook').value.trim() || DEFAULT_SETTINGS.genieAcsWebhook;
+    const newUseCors = document.getElementById('settingUseCorsProxy').checked;
+    const newCorsProxyUrl = document.getElementById('settingCorsProxyUrl').value.trim() || DEFAULT_SETTINGS.corsProxyUrl;
     const newTileUrl = document.getElementById('settingTileUrl').value.trim() || DEFAULT_SETTINGS.tileLayerUrl;
     const newLat = parseFloat(document.getElementById('settingDefaultLat').value) || DEFAULT_SETTINGS.defaultLat;
     const newLng = parseFloat(document.getElementById('settingDefaultLng').value) || DEFAULT_SETTINGS.defaultLng;
@@ -2599,6 +2756,8 @@
       genieAcsNbiUrl: newNbiUrl,
       genieAcsUrl: newAcsUrl,
       genieAcsWebhook: newWebhook,
+      useCorsProxy: newUseCors,
+      corsProxyUrl: newCorsProxyUrl,
       tileLayerUrl: newTileUrl,
       defaultLat: newLat,
       defaultLng: newLng,
@@ -2662,6 +2821,40 @@
   document.getElementById('btnCancelSettings').addEventListener('click', closeSettingsModal);
   document.getElementById('btnSaveSettings').addEventListener('click', saveSettings);
   document.getElementById('btnResetSettings').addEventListener('click', resetSettings);
+
+  // Offline Data Snapshot & Tile Cache Actions
+  document.getElementById('btnSaveDataSnapshot').addEventListener('click', () => {
+    try {
+      localStorage.setItem('cached_pppoe_data', JSON.stringify(dataStore));
+      localStorage.setItem('cached_odp_data', JSON.stringify(odpDataStore));
+      const pCount = Object.keys(dataStore).length;
+      const oCount = Object.keys(odpDataStore).length;
+      showNotification(`Snapshot ${pCount} klien & ${oCount} ODP berhasil disimpan ke LocalStorage!`, '💾');
+    } catch (e) {
+      showNotification('Gagal menyimpan data ke LocalStorage: ' + e.message, '⚠️');
+    }
+  });
+
+  document.getElementById('btnClearTileCache').addEventListener('click', () => {
+    showConfirmModal(
+      'Bersihkan Cache Tile Peta',
+      'Hapus semua tile peta yang tersimpan di memori cache offline perangkat? Peta akan mengunduh ulang tile saat digeser.',
+      () => {
+        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+          navigator.serviceWorker.controller.postMessage({ action: 'CLEAR_TILE_CACHE' });
+        }
+        if ('caches' in window) {
+          caches.delete('wifi-map-tiles-v2').then(() => {
+            showNotification('Cache tile peta offline berhasil dibersihkan!', '🧹');
+          });
+        } else {
+          showNotification('Cache dibersihkan', '🧹');
+        }
+      },
+      'Ya, Bersihkan',
+      true
+    );
+  });
 
   const inputGuiUrl = document.getElementById('settingGenieAcsUrl');
   if (inputGuiUrl) {
