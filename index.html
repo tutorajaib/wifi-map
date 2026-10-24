@@ -743,6 +743,152 @@
         left: 10px; right: 10px; top: auto; bottom: 10px; max-width: none;
       }
     }
+
+    /* Distance Measurement Tool Styles */
+    .measuring-mode, .measuring-mode .leaflet-interactive, .measuring-mode #map {
+      cursor: crosshair !important;
+    }
+    .measure-floating-card {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(255, 255, 255, 0.96);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1.5px solid #0284c7;
+      box-shadow: 0 16px 36px rgba(2, 132, 199, 0.22), 0 4px 12px rgba(0, 0, 0, 0.1);
+      border-radius: 14px;
+      padding: 12px 16px;
+      z-index: 1500;
+      width: 90%;
+      max-width: 380px;
+      animation: measureSlideUp 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes measureSlideUp {
+      from { transform: translate(-50%, 25px); opacity: 0; }
+      to { transform: translate(-50%, 0); opacity: 1; }
+    }
+    .measure-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #e2e8f0;
+      color: #0369a1;
+      font-size: 13px;
+    }
+    .measure-close-btn {
+      background: none;
+      border: none;
+      font-size: 15px;
+      font-weight: 700;
+      color: #64748b;
+      cursor: pointer;
+      padding: 2px 6px;
+      border-radius: 6px;
+      line-height: 1;
+    }
+    .measure-close-btn:hover {
+      background: #f1f5f9;
+      color: #ef4444;
+    }
+    .measure-stats-row {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .measure-stat-col {
+      flex: 1;
+      background: #f0f9ff;
+      border: 1px solid #bae6fd;
+      border-radius: 8px;
+      padding: 6px 10px;
+      text-align: center;
+    }
+    .measure-stat-label {
+      display: block;
+      font-size: 10px;
+      font-weight: 700;
+      color: #0284c7;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .measure-stat-val {
+      display: block;
+      font-size: 16px;
+      font-weight: 800;
+      color: #0c4a6e;
+      margin-top: 2px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    .measure-hint {
+      font-size: 11px;
+      color: #475569;
+      margin-bottom: 10px;
+      line-height: 1.4;
+      text-align: center;
+      background: #f8fafc;
+      padding: 5px 8px;
+      border-radius: 6px;
+      border: 1px dashed #cbd5e1;
+    }
+    .measure-actions {
+      display: flex;
+      gap: 6px;
+      justify-content: space-between;
+    }
+    .measure-node-icon {
+      background: #0284c7;
+      border: 2px solid #ffffff;
+      color: #ffffff;
+      border-radius: 50%;
+      font-weight: 800;
+      font-size: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+    }
+    .measure-node-icon.start {
+      background: #16a34a;
+    }
+    .measure-node-icon.end {
+      background: #ea580c;
+    }
+    .measure-segment-tooltip {
+      background: rgba(15, 23, 42, 0.9) !important;
+      color: #ffffff !important;
+      border: 1px solid rgba(255, 255, 255, 0.3) !important;
+      border-radius: 6px !important;
+      padding: 2px 6px !important;
+      font-size: 11px !important;
+      font-weight: 700 !important;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace !important;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2) !important;
+      white-space: nowrap !important;
+    }
+    .measure-segment-tooltip::before {
+      display: none !important;
+    }
+    .measure-live-tooltip {
+      background: #0284c7 !important;
+      color: #ffffff !important;
+      border: 1.5px solid #ffffff !important;
+      border-radius: 6px !important;
+      padding: 3px 8px !important;
+      font-size: 11px !important;
+      font-weight: 700 !important;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.25) !important;
+      pointer-events: none !important;
+    }
+    .btn-measure-active {
+      background: #0284c7 !important;
+      color: #ffffff !important;
+      border-color: #0369a1 !important;
+      box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.4) !important;
+    }
   </style>
 </head>
 <body>
@@ -756,6 +902,9 @@
         </button>
         <button id="fitAll" class="ui-btn" style="flex:1;" title="Fokuskan seluruh titik jaringan">
           🔍 Fit Semua
+        </button>
+        <button id="btnMeasureDistance" class="ui-btn" style="padding: 8px 10px; width:auto; font-weight:700;" title="Ukur Jarak Kabel &amp; Jalur Fiber (Ruler)">
+          📏 Ukur
         </button>
         <button id="showConnectedPPPoE" class="ui-btn ui-btn-primary" style="padding: 8px 10px;" title="Tampilkan PPPoE terhubung ke ODP aktif">
           🔗 ODP
@@ -805,6 +954,42 @@
 
   <!-- Map Target -->
   <div id="map"></div>
+
+  <!-- Floating Distance Measurement Card -->
+  <div id="measureControlPanel" class="measure-floating-card" style="display:none;">
+    <div class="measure-card-header">
+      <span style="font-weight:700; display:flex; align-items:center; gap:6px;">
+        📏 Pengukur Jarak Kabel / Jalur
+      </span>
+      <button type="button" id="btnCloseMeasure" class="measure-close-btn" title="Tutup Pengukuran">✕</button>
+    </div>
+    <div class="measure-card-body">
+      <div class="measure-stats-row">
+        <div class="measure-stat-col">
+          <span class="measure-stat-label">Total Jarak</span>
+          <span id="measureTotalDistance" class="measure-stat-val">0 m</span>
+        </div>
+        <div class="measure-stat-col">
+          <span class="measure-stat-label">Titik Ukur</span>
+          <span id="measurePointCount" class="measure-stat-val">0</span>
+        </div>
+      </div>
+      <div id="measureInstruction" class="measure-hint">
+        Klik titik awal di peta, ODP, atau rumah klien untuk mulai mengukur.
+      </div>
+      <div class="measure-actions">
+        <button type="button" id="btnUndoMeasure" class="ui-btn" style="padding:6px 10px; font-size:11px; width:auto;" title="Hapus titik terakhir">
+          ↩ Hapus Titik
+        </button>
+        <button type="button" id="btnFinishMeasure" class="ui-btn ui-btn-primary" style="padding:6px 10px; font-size:11px; width:auto;" title="Selesai mengukur jalur">
+          ✅ Selesai
+        </button>
+        <button type="button" id="btnResetMeasure" class="ui-btn ui-btn-danger" style="padding:6px 10px; font-size:11px; width:auto;" title="Ulangi pengukuran dari awal">
+          🗑️ Reset
+        </button>
+      </div>
+    </div>
+  </div>
 
   <!-- Sidebar Overlay & Drawer -->
   <div class="sidebar-overlay" id="sidebarOverlay"></div>
@@ -924,6 +1109,14 @@
             <strong id="connectionsStatusText" style="color:#16a34a;">Aktif</strong>
           </button>
         </div>
+      </div>
+
+      <!-- Section: Alat Ukur Jarak -->
+      <div>
+        <div class="sidebar-section-title">Alat Pengukuran Lapangan</div>
+        <button type="button" id="btnSideMeasure" class="ui-btn" style="width:100%; justify-content:center; gap:8px; font-weight:700; background:#f0f9ff; color:#0369a1; border:1.5px solid #bae6fd; padding:10px 12px;">
+          📏 Ukur Jarak Kabel (Ruler Tool)
+        </button>
       </div>
 
       <!-- Section: Pengaturan Sistem -->
@@ -1378,7 +1571,347 @@
 
   let currentFilter = 'all'; // 'all', 'online', 'offline', 'acs'
   let lastodp = null;
-  let editingMarker = null;
+  /**
+   * Distance Measurement Tool (Ukur Jarak Kabel & Jalur Fiber)
+   */
+  const measureLayer = L.layerGroup().addTo(map);
+  let isMeasuring = false;
+  let measurePoints = []; // Array of L.latLng
+  let measureMarkers = []; // Array of L.marker
+  let measureSegmentTooltips = []; // Array of L.marker
+  let measurePolyline = null;
+  let measurePolylineOutline = null;
+  let measureRubberband = null;
+  let measureRubberbandOutline = null;
+  let measureHoverTooltip = null;
+
+  function formatDistance(meters) {
+    if (!meters || isNaN(meters)) return '0 m';
+    if (meters < 1000) {
+      return `${meters.toFixed(1)} m`;
+    }
+    return `${(meters / 1000).toFixed(2)} km (${meters.toFixed(0)} m)`;
+  }
+
+  function calculateTotalMeasureDistance(points) {
+    if (!points || points.length < 2) return 0;
+    let total = 0;
+    for (let i = 0; i < points.length - 1; i++) {
+      total += points[i].distanceTo(points[i + 1]);
+    }
+    return total;
+  }
+
+  function startMeasureMode() {
+    isMeasuring = true;
+    document.body.classList.add('measuring-mode');
+    const btnTop = document.getElementById('btnMeasureDistance');
+    if (btnTop) btnTop.classList.add('btn-measure-active');
+
+    const panel = document.getElementById('measureControlPanel');
+    if (panel) panel.style.display = 'block';
+
+    const hint = document.getElementById('measureInstruction');
+    if (hint) {
+      if (measurePoints.length === 0) {
+        hint.innerText = 'Klik titik awal di peta, ODP, atau rumah klien untuk mulai.';
+      } else {
+        hint.innerText = 'Klik titik berikutnya untuk mengukur jalur bentangan kabel.';
+      }
+    }
+
+    closeSidebar();
+    showNotification('Mode Ukur Jarak Aktif: Klik pada peta / ODP / klien', '📏', true);
+  }
+
+  function stopMeasureMode() {
+    isMeasuring = false;
+    document.body.classList.remove('measuring-mode');
+    const btnTop = document.getElementById('btnMeasureDistance');
+    if (btnTop) btnTop.classList.remove('btn-measure-active');
+
+    const panel = document.getElementById('measureControlPanel');
+    if (panel) panel.style.display = 'none';
+
+    // Clear live preview rubberband and hover tooltip
+    if (measureRubberband) {
+      measureLayer.removeLayer(measureRubberband);
+      measureRubberband = null;
+    }
+    if (measureRubberbandOutline) {
+      measureLayer.removeLayer(measureRubberbandOutline);
+      measureRubberbandOutline = null;
+    }
+    if (measureHoverTooltip) {
+      map.closeTooltip(measureHoverTooltip);
+      measureHoverTooltip = null;
+    }
+
+    showNotification('Mode Ukur Jarak ditutup', 'ℹ️');
+  }
+
+  function toggleMeasureMode() {
+    if (isMeasuring) {
+      stopMeasureMode();
+    } else {
+      startMeasureMode();
+    }
+  }
+
+  function renderMeasureGraphics() {
+    measureLayer.clearLayers();
+    measureMarkers = [];
+    measureSegmentTooltips = [];
+
+    if (measurePoints.length === 0) {
+      document.getElementById('measureTotalDistance').innerText = '0 m';
+      document.getElementById('measurePointCount').innerText = '0';
+      const hint = document.getElementById('measureInstruction');
+      if (hint) hint.innerText = 'Klik titik awal di peta, ODP, atau rumah klien untuk mulai mengukur.';
+      return;
+    }
+
+    // Draw main polyline with high-contrast outline
+    if (measurePoints.length >= 2) {
+      measurePolylineOutline = L.polyline(measurePoints, {
+        color: '#ffffff',
+        weight: 6,
+        opacity: 0.8,
+        lineCap: 'round',
+        lineJoin: 'round'
+      }).addTo(measureLayer);
+
+      measurePolyline = L.polyline(measurePoints, {
+        color: '#0284c7',
+        weight: 3.5,
+        dashArray: '6, 6',
+        opacity: 0.95,
+        lineCap: 'round',
+        lineJoin: 'round'
+      }).addTo(measureLayer);
+
+      // Add segment distance badges along each segment midpoint
+      for (let i = 0; i < measurePoints.length - 1; i++) {
+        const p1 = measurePoints[i];
+        const p2 = measurePoints[i + 1];
+        const segDist = p1.distanceTo(p2);
+        const midLat = (p1.lat + p2.lat) / 2;
+        const midLng = (p1.lng + p2.lng) / 2;
+
+        const segMarker = L.marker([midLat, midLng], {
+          icon: L.divIcon({
+            className: '',
+            html: `<div class="measure-segment-tooltip">${formatDistance(segDist)}</div>`,
+            iconSize: [60, 20],
+            iconAnchor: [30, 10]
+          }),
+          interactive: false
+        }).addTo(measureLayer);
+
+        measureSegmentTooltips.push(segMarker);
+      }
+    }
+
+    // Draw vertex node markers
+    measurePoints.forEach((pt, idx) => {
+      let iconClass = 'measure-node-icon';
+      let label = (idx + 1).toString();
+      if (idx === 0) {
+        iconClass += ' start';
+        label = '1';
+      } else if (idx === measurePoints.length - 1) {
+        iconClass += ' end';
+      }
+
+      const nodeMarker = L.marker(pt, {
+        icon: L.divIcon({
+          className: '',
+          html: `<div class="${iconClass}" style="width:20px; height:20px;">${label}</div>`,
+          iconSize: [20, 20],
+          iconAnchor: [10, 10]
+        }),
+        draggable: false
+      }).addTo(measureLayer);
+
+      nodeMarker.on('click', (e) => {
+        L.DomEvent.stopPropagation(e);
+        if (idx === measurePoints.length - 1 && measurePoints.length > 1) {
+          finishMeasure();
+        }
+      });
+
+      measureMarkers.push(nodeMarker);
+    });
+
+    const totalDist = calculateTotalMeasureDistance(measurePoints);
+    document.getElementById('measureTotalDistance').innerText = formatDistance(totalDist);
+    document.getElementById('measurePointCount').innerText = measurePoints.length.toString();
+
+    const hint = document.getElementById('measureInstruction');
+    if (hint) {
+      if (measurePoints.length === 1) {
+        hint.innerText = 'Titik 1 tercatat. Klik titik berikutnya untuk mengukur bentangan kabel.';
+      } else {
+        hint.innerText = `Jarak: ${formatDistance(totalDist)}. Klik titik lain untuk menambah belokan, atau Selesai.`;
+      }
+    }
+  }
+
+  function addMeasurePoint(latlng) {
+    if (!latlng) return;
+    measurePoints.push(latlng);
+    renderMeasureGraphics();
+  }
+
+  function undoLastMeasurePoint() {
+    if (measurePoints.length > 0) {
+      measurePoints.pop();
+      renderMeasureGraphics();
+      if (measureRubberband) {
+        measureLayer.removeLayer(measureRubberband);
+        measureRubberband = null;
+      }
+      if (measureRubberbandOutline) {
+        measureLayer.removeLayer(measureRubberbandOutline);
+        measureRubberbandOutline = null;
+      }
+      if (measureHoverTooltip) {
+        map.closeTooltip(measureHoverTooltip);
+        measureHoverTooltip = null;
+      }
+      showNotification('Titik ukur terakhir dihapus', '↩');
+    }
+  }
+
+  function resetMeasure() {
+    measurePoints = [];
+    renderMeasureGraphics();
+    if (measureRubberband) {
+      measureLayer.removeLayer(measureRubberband);
+      measureRubberband = null;
+    }
+    if (measureRubberbandOutline) {
+      measureLayer.removeLayer(measureRubberbandOutline);
+      measureRubberbandOutline = null;
+    }
+    if (measureHoverTooltip) {
+      map.closeTooltip(measureHoverTooltip);
+      measureHoverTooltip = null;
+    }
+    showNotification('Jalur pengukuran direset', '🔄');
+  }
+
+  function finishMeasure() {
+    if (measurePoints.length < 2) {
+      showNotification('Tambahkan minimal 2 titik untuk menyelesaikan pengukuran', '⚠️');
+      return;
+    }
+    if (measureRubberband) {
+      measureLayer.removeLayer(measureRubberband);
+      measureRubberband = null;
+    }
+    if (measureRubberbandOutline) {
+      measureLayer.removeLayer(measureRubberbandOutline);
+      measureRubberbandOutline = null;
+    }
+    if (measureHoverTooltip) {
+      map.closeTooltip(measureHoverTooltip);
+      measureHoverTooltip = null;
+    }
+
+    const totalDist = calculateTotalMeasureDistance(measurePoints);
+    const hint = document.getElementById('measureInstruction');
+    if (hint) {
+      hint.innerText = `✅ Pengukuran Selesai: Total jarak kabel ${formatDistance(totalDist)} (${measurePoints.length} titik).`;
+    }
+    showNotification(`Selesai! Panjang kabel: ${formatDistance(totalDist)}`, '📏', true);
+  }
+
+  // Map Click Listener for Measuring
+  map.on('click', function(e) {
+    if (!isMeasuring) return;
+    addMeasurePoint(e.latlng);
+  });
+
+  // Map Mousemove for Live Rubberband Preview
+  map.on('mousemove', function(e) {
+    if (!isMeasuring || measurePoints.length === 0) {
+      if (measureRubberband) {
+        measureLayer.removeLayer(measureRubberband);
+        measureRubberband = null;
+      }
+      if (measureRubberbandOutline) {
+        measureLayer.removeLayer(measureRubberbandOutline);
+        measureRubberbandOutline = null;
+      }
+      if (measureHoverTooltip) {
+        map.closeTooltip(measureHoverTooltip);
+        measureHoverTooltip = null;
+      }
+      return;
+    }
+
+    const lastPt = measurePoints[measurePoints.length - 1];
+    const currentPt = e.latlng;
+    const segDist = lastPt.distanceTo(currentPt);
+    const totalDistSoFar = calculateTotalMeasureDistance(measurePoints) + segDist;
+
+    const previewCoords = [lastPt, currentPt];
+
+    if (!measureRubberbandOutline) {
+      measureRubberbandOutline = L.polyline(previewCoords, {
+        color: '#ffffff',
+        weight: 5,
+        opacity: 0.6,
+        dashArray: '3, 4'
+      }).addTo(measureLayer);
+    } else {
+      measureRubberbandOutline.setLatLngs(previewCoords);
+    }
+
+    if (!measureRubberband) {
+      measureRubberband = L.polyline(previewCoords, {
+        color: '#0284c7',
+        weight: 3,
+        opacity: 0.85,
+        dashArray: '4, 4'
+      }).addTo(measureLayer);
+    } else {
+      measureRubberband.setLatLngs(previewCoords);
+    }
+
+    // Live tooltip at mouse position
+    if (!measureHoverTooltip) {
+      measureHoverTooltip = L.tooltip({
+        permanent: true,
+        direction: 'right',
+        offset: [14, 0],
+        className: 'measure-live-tooltip'
+      })
+      .setLatLng(currentPt)
+      .setContent(`+ ${formatDistance(segDist)}<br/><span style="font-size:9px; opacity:0.9;">Total: ${formatDistance(totalDistSoFar)}</span>`)
+      .addTo(map);
+    } else {
+      measureHoverTooltip
+        .setLatLng(currentPt)
+        .setContent(`+ ${formatDistance(segDist)}<br/><span style="font-size:9px; opacity:0.9;">Total: ${formatDistance(totalDistSoFar)}</span>`);
+    }
+  });
+
+  // Double click finishes measurement
+  map.on('dblclick', function(e) {
+    if (isMeasuring && measurePoints.length >= 2) {
+      L.DomEvent.stopPropagation(e);
+      finishMeasure();
+    }
+  });
+
+  // Escape key cancels/stops measurement
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && isMeasuring) {
+      stopMeasureMode();
+    }
+  });
 
   /**
    * Filter System & Clustering Update
@@ -1857,7 +2390,13 @@
     } else {
       const m = L.marker([lat, lng], { icon: odpIcon }).bindPopup(buildOdpPopup(data));
       
-      m.on('click', function() {
+      m.on('click', function(e) {
+        if (isMeasuring) {
+          L.DomEvent.stopPropagation(e);
+          addMeasurePoint(m.getLatLng());
+          m.closePopup();
+          return;
+        }
         lastodp = data.name || 'ODP-' + key;
         const connectedPPPoE = Object.values(dataStore).filter(p => p.odp === lastodp).length;
         showNotification(`ODP: ${lastodp} (${connectedPPPoE} klien terhubung)`, '📍', true);
@@ -2225,6 +2764,13 @@
             showNotification(`Perubahan posisi "${label}" dibatalkan`);
             if (prevCancel) prevCancel();
           };
+        })
+        .on('click', function(event) {
+          if (isMeasuring) {
+            L.DomEvent.stopPropagation(event);
+            addMeasurePoint(m.getLatLng());
+            m.closePopup();
+          }
         });
 
       markers[key] = m;
@@ -2947,6 +3493,30 @@
 
     showNotification(`Menampilkan ${connectedPPPoE.length} PPPoE pada ${lastodp}`, '🔗');
   });
+
+  // Distance Measurement Tool Event Listeners
+  const btnMeasure = document.getElementById('btnMeasureDistance');
+  if (btnMeasure) btnMeasure.addEventListener('click', toggleMeasureMode);
+
+  const btnSideMeasure = document.getElementById('btnSideMeasure');
+  if (btnSideMeasure) {
+    btnSideMeasure.addEventListener('click', () => {
+      closeSidebar();
+      startMeasureMode();
+    });
+  }
+
+  const btnCloseMeas = document.getElementById('btnCloseMeasure');
+  if (btnCloseMeas) btnCloseMeas.addEventListener('click', stopMeasureMode);
+
+  const btnUndoMeas = document.getElementById('btnUndoMeasure');
+  if (btnUndoMeas) btnUndoMeas.addEventListener('click', undoLastMeasurePoint);
+
+  const btnResetMeas = document.getElementById('btnResetMeasure');
+  if (btnResetMeas) btnResetMeas.addEventListener('click', resetMeasure);
+
+  const btnFinishMeas = document.getElementById('btnFinishMeasure');
+  if (btnFinishMeas) btnFinishMeas.addEventListener('click', finishMeasure);
 
   // Service Worker Registration
   if ('serviceWorker' in navigator) {
